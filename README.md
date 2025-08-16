@@ -41,7 +41,7 @@ repo.setModelsDir(path.join(__dirname, "models"));
 // export SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 
 // 2) (Optional) Inject a logger implementing .error(err, ctx)
-repo.setLogger(console);
+repo.setLogger(console.log);
 
 // 3) (Optional) Inject a cache with { get, put, del, keys }
 const simpleCache = new Map();
@@ -97,8 +97,8 @@ repo.setModelsDir(path.join(__dirname, "models"));
 Provide any object exposing `.error(err, ctx)`.
 
 ```js
-repo.setLogger(console); // basic
-// repo.setLogger(pinoInstance); // or any logger with .error
+repo.setLogger(console.log); // basic
+// repo.setLogger(pinoInstance); // or any logger
 ```
 
 ### Cache injection (optional)
