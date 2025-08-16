@@ -40,7 +40,7 @@ repo.setModelsDir(path.join(__dirname, "models"));
 // or via environment variable:
 // export SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 
-// 2) (Optional) Inject a logger implementing .error(err, ctx)
+// 2) (Optional) Inject a error logger implementing (err, ctx)
 repo.setLogger(console.log);
 
 // 3) (Optional) Inject a cache with { get, put, del, keys }
@@ -92,13 +92,16 @@ repo.setModelsDir(path.join(__dirname, "models"));
   2. Require a file at `<MODELS_DIR>/<name>` that exports/registers the model
 - A simple pluralization is applied if `name` does not end with `s` (e.g. `"user"` → `"users"`).
 
-### Logger injection (optional)
+### Error Logger injection (optional)
 
 Provide any object exposing `.error(err, ctx)`.
 
 ```js
 repo.setLogger(console.log); // basic
-// repo.setLogger(pinoInstance); // or any logger
+// repo.setLogger(Sentry.captureException); // Sentry
+// repo.setLogger(rollbar.error); // Rollbar
+// repo.setLogger(pinoInstance); // any logger
+// repo.setLogger(myCustomFunction); // or custom function
 ```
 
 ### Cache injection (optional)

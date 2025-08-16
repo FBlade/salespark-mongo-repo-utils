@@ -1,6 +1,6 @@
 {
   "name": "@salespark/mongo-repo-utils",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Utility helpers for MongoDB repositories with caching, metrics, and flexible model resolution.",
   "main": "index.js",
   "files": [
