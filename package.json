@@ -1,0 +1,37 @@
+{
+  "name": "@salespark/mongo-repo-utils",
+  "version": "1.0.0",
+  "description": "Utility helpers for MongoDB repositories with caching, metrics, and flexible model resolution.",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "scripts": {
+    "prepublishOnly": "echo 'No build step required for JS package'"
+  },
+  "keywords": [
+    "mongodb",
+    "mongoose",
+    "repository",
+    "utils",
+    "cache",
+    "logger",
+    "metrics",
+    "salespark"
+  ],
+  "author": "SalesPark",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/FBlade/salespark-mongo-repo-utils.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "dependencies": {
+    "mongoose": "^7.6.0"
+  },
+  "peerDependencies": {
+    "mongoose": ">=7"
+  }
+}
