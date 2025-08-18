@@ -320,6 +320,59 @@ const buildCacheKey = (fnName, args) => {
 };
 
 /*******************************************************
+ * ##: Normalize TTL
+ * Normalizes TTL values to milliseconds.
+ * Accepts:
+ *  - number: treated as milliseconds (0 disables caching for most stores)
+ *  - string: "<int>[ms|s|m|h|d]" (case-insensitive). Examples: "500ms", "30s", "5m", "4h", "2d", "60000"
+ * Fallbacks:
+ *  - null/undefined/invalid -> DEFAULT_TTL
+ *  - negative numbers -> 0
+ * History:
+ * 18-08-2025: Created
+ *******************************************************/
+const normalizeTTL = (ttl) => {
+  try {
+    // Number input → treat as milliseconds
+    if (typeof ttl === "number" && Number.isFinite(ttl)) {
+      return ttl < 0 ? 0 : ttl; // negative -> 0 (effectively no-cache for most stores)
+    }
+
+    // String input → parse "<int>[unit]"
+    if (typeof ttl === "string") {
+      const s = ttl.trim().toLowerCase();
+      const m = s.match(/^(\d+)(ms|s|m|h|d)?$/);
+      if (m) {
+        const value = parseInt(m[1], 10);
+        const unit = m[2] || "ms"; // default to milliseconds when unit is omitted
+        switch (unit) {
+          case "ms":
+            return value;
+          case "s":
+            return value * 1_000;
+          case "m":
+            return value * 60_000;
+          case "h":
+            return value * 3_600_000;
+          case "d":
+            return value * 86_400_000;
+          default:
+            // Shouldn't reach here due to regex, but keep safe:
+            return DEFAULT_TTL;
+        }
+      }
+      // Unparseable string -> default
+      return DEFAULT_TTL;
+    }
+
+    // Fallback for other types/null/undefined
+    return DEFAULT_TTL;
+  } catch (_) {
+    return DEFAULT_TTL;
+  }
+};
+
+/*******************************************************
  * ##: Cache Wrapper
  * Wraps a function with caching logic and handle responses
  * @param {String} fnName - Function name
@@ -328,9 +381,12 @@ const buildCacheKey = (fnName, args) => {
  * @param {Function} runFn - Function to run
  * History:
  * 14-08-2025: Created
+ * 18-08-2025: Added support for cache TTL normalization
  *******************************************************/
 const withCache = async (fnName, args, cacheOpts, runFn) => {
   const { enabled = true, key, ttl = DEFAULT_TTL, cacheIf = (r) => r?.status === true } = cacheOpts || {};
+
+  const normalizedTTL = normalizeTTL(ttl);
 
   if (!enabled) {
     const res = await runFn();
@@ -350,7 +406,7 @@ const withCache = async (fnName, args, cacheOpts, runFn) => {
 
   const res = await runFn();
   const normalized = res && typeof res.status === "boolean" ? res : ok(res);
-  if (cacheIf(normalized)) cache.put(cacheKey, normalized, ttl);
+  if (cacheIf(normalized)) cache.put(cacheKey, normalized, normalizedTTL);
   return normalized;
 };
 

@@ -40,14 +40,8 @@ repo.setModelsDir(path.join(__dirname, "models"));
 // or via environment variable:
 // export SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 
-// 2) (Optional) Inject a logger
-// Preferred: a function (err, ctx) => void
-repo.setLogger((err, ctx) => {
-  console.error("LOG:", ctx, err);
-});
-
-// Alternative: an object with .error(), e.g. console
-repo.setLogger(console);
+// 2) (Optional) Inject a error logger implementing (err, ctx)
+repo.setLogger(console.log);
 
 // 3) (Optional) Inject a cache with { get, put, del, keys }
 const simpleCache = new Map();
@@ -98,17 +92,16 @@ repo.setModelsDir(path.join(__dirname, "models"));
   2. Require a file at `<MODELS_DIR>/<name>` that exports/registers the model
 - A simple pluralization is applied if `name` does not end with `s` (e.g. `"user"` → `"users"`).
 
-### Logger injection (optional)
+### Error Logger injection (optional)
 
-Preferred: provide a function `(err, ctx) => void`.
+Preferred: provide a function `(err, ctx) => void` using `setLogger()`.
 
 ```js
-repo.setLogger((err, ctx) => {
-  console.error("LOG:", ctx, err);
-});
-
-// Or adapt an object logger with .error():
-repo.setLogger(console); // works because console.error exists
+repo.setLogger(console.log); // basic
+// repo.setLogger(Sentry.captureException); // Sentry
+// repo.setLogger(rollbar.error); // Rollbar
+// repo.setLogger(pinoInstance); // any logger
+// repo.setLogger(myCustomFunction); // or custom function
 ```
 
 ### Cache injection (optional)
@@ -144,7 +137,7 @@ Read helpers accept `cacheOpts`:
 {
   enabled?: boolean;          // default true if object provided
   key?: string;               // explicit cache key; otherwise an auto key is built
-  ttl?: number | string;      // milliseconds (number) or string: \"500ms\", \"30s\", \"5m\", \"4h\", \"2d\"; default 60_000 ms
+  ttl?: number;               // default 60_000 ms
   cacheIf?: (res) => boolean; // default: caches only if res.status === true
 }
 ```
@@ -195,7 +188,7 @@ await repo.updateMany(
 **Examples**
 
 ```js
-await repo.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: "1h" });
+await repo.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: 120_000 });
 
 await repo.getMany("orders", { status: "paid" }, ["_id", "total"], { createdAt: -1 }, { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 });
 
@@ -204,7 +197,7 @@ const paged = await repo.getManyWithPagination("products", { active: true }, ["_
   key: "products:active:p2:l20",
 });
 
-await repo.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: "5m" });
+await repo.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: 10_000 });
 ```
 
 ### Write
@@ -258,7 +251,7 @@ await repo.withTransaction(
 ## Error handling
 
 - On failure, functions return `{ status: false, data: error }`.
-- If a logger was injected, errors are reported via `logger.error(err, ctx)`.
+- If a logger was injected, errors are reported via `logger(err, ctx)`.
 
 ---
 
@@ -276,5 +269,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 1_  
-_Last update: 16-08-2025_
+_Document version: 2_  
+_Last update: 18-08-2025_
