@@ -269,5 +269,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 2_  
-_Last update: 18-08-2025_
+_Document version: 1_  
+_Last update: 16-08-2025_
