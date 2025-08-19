@@ -258,7 +258,7 @@ await repo.withTransaction(
 ## Error handling
 
 - On failure, functions return `{ status: false, data: error }`.
-- If a logger was injected, errors are reported via `logger.error(err, ctx)`.
+- If a logger was injected, errors are reported via `logger(err, ctx)`.
 
 ---
 
@@ -276,5 +276,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 2_  
-_Last update: 18-08-2025_
+_Document version: 3_  
+_Last update: 19-08-2025_

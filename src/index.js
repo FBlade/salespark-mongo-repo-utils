@@ -87,9 +87,6 @@ const METRICS = {
   db: { perOp: {} }, // { "getOne:users": { count, totalMs, minMs, maxMs } }
 };
 
-// Simple in-memory cache for resolved models
-const modelCache = new Map();
-
 // Helper function to get current time in nanoseconds
 const _nowNs = () => (typeof process?.hrtime?.bigint === "function" ? process.hrtime.bigint() : null);
 
@@ -195,6 +192,7 @@ const _parseWriteArg = (arg) => {
  * @param {Any} modelOrName - Model instance or name
  * History:
  * 14-08-2025: Created
+ * 19-08-2025: Fix model resolution logic and removed modelCache
  ****************************************************/
 const resolveModel = (modelOrName) => {
   // If a Model (function/object) is provided directly, return it
@@ -207,30 +205,20 @@ const resolveModel = (modelOrName) => {
   // Check and ensure model name is pluralized
   name = name.endsWith("s") ? name : `${name}s`;
 
-  // Return from cache if available
-  if (modelCache.has(name)) return modelCache.get(name);
-
   // 1) Try mongoose registry
   if (mongoose.models[name]) {
-    modelCache.set(name, mongoose.models[name]);
     return mongoose.models[name];
   }
 
   // 2) Try requiring ../models/<name>
   //    Expectation: this file either exports the Model or registers it into mongoose.models
-  const candidatePath = path.join(getModelsDir(), name);
-  const mod = require(candidatePath);
+  const candidatePath = path.join(MODELS_DIR, name);
+  require(candidatePath);
 
-  // If the file exported the Model directly, use it
-  if (mod && mod.modelName) {
-    modelCache.set(name, mod);
-    return mod;
-  }
-
-  // If the file registered the model globally, pick it from mongoose.models
+  // 3) Read back from registry (never trust the module return)
   if (mongoose.models[name]) {
-    modelCache.set(name, mongoose.models[name]);
-    return mongoose.models[name];
+    const M = mongoose.models[name];
+    return M;
   }
 
   // If we got here, the model name/file is incorrect or not registered
