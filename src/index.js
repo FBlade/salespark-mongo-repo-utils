@@ -184,44 +184,66 @@ const _parseWriteArg = (arg) => {
 
 /****************************************************
  * ##: Resolve a Mongoose Model
- * Resolve a Mongoose Model from a Model instance or an exact model name (string).
+ * Resolve a Mongoose Model from:
+ *   - A Model instance, or
+ *   - An exact model name (string).
+ *
  * Assumptions:
  * - The provided name matches exactly the registered model name in mongoose.models
  *   OR matches exactly the filename under ../models/<name> that registers/exports the model.
- * - No heuristics, no pluralization, no case conversions.
+ * - No heuristics beyond optional pluralization. No fuzzy matching, no case conversion.
+ *
+ * Resolution logic:
+ * 1. If a Model (function with .modelName) is provided directly, return it.
+ * 2. If a document/instance is provided, return its constructor (the actual Model).
+ * 3. Otherwise, coerce to string and pluralize if needed (append "s").
+ * 4. Check if the Model is already in mongoose.models registry → return it.
+ * 5. Require the corresponding file under MODELS_DIR.
+ *    Expectation: this file either registers the Model into mongoose.models
+ *    OR directly exports the Model.
+ * 6. Re-check mongoose.models registry. If found, return it.
+ * 7. If not found but the module export is itself a Model, return it.
+ * 8. Otherwise, throw descriptive error.
  * @param {Any} modelOrName - Model instance or name
  * History:
  * 14-08-2025: Created
  * 19-08-2025: Fix model resolution logic and removed modelCache
  ****************************************************/
 const resolveModel = (modelOrName) => {
-  // If a Model (function/object) is provided directly, return it
-  if (typeof modelOrName === "function" || typeof modelOrName === "object") {
+  // Case 1: Provided directly as a Model constructor
+  if (typeof modelOrName === "function" && modelOrName.modelName) {
     return modelOrName;
   }
 
-  let name = String(modelOrName);
+  // Case 2: Provided as a document/instance → return its constructor
+  if (typeof modelOrName === "object" && modelOrName?.constructor?.modelName) {
+    return modelOrName.constructor;
+  }
 
-  // Check and ensure model name is pluralized
+  // Case 3: Provided as string → normalize to plural form
+  let name = String(modelOrName);
   name = name.endsWith("s") ? name : `${name}s`;
 
-  // 1) Try mongoose registry
+  // Step 4: Try mongoose registry
   if (mongoose.models[name]) {
     return mongoose.models[name];
   }
 
-  // 2) Try requiring ../models/<name>
-  //    Expectation: this file either exports the Model or registers it into mongoose.models
+  // Step 5: Require model file
   const candidatePath = path.join(MODELS_DIR, name);
-  require(candidatePath);
+  const exported = require(candidatePath);
 
-  // 3) Read back from registry (never trust the module return)
+  // Step 6: Check registry again (never trust direct require return)
   if (mongoose.models[name]) {
-    const M = mongoose.models[name];
-    return M;
+    return mongoose.models[name];
   }
 
-  // If we got here, the model name/file is incorrect or not registered
+  // Step 7: Fallback: if export itself is a Model
+  if (exported?.modelName) {
+    return exported;
+  }
+
+  // Step 8: If still not resolved → throw
   throw new Error(`Mongoose model "${name}" not found (expected registered as mongoose.models["${name}"] or exported by ${candidatePath})`);
 };
 
@@ -540,6 +562,7 @@ const invalidateCache = (input) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const createOne = async (modelOrName, payload, writeArg) => {
   try {
@@ -554,7 +577,7 @@ const createOne = async (modelOrName, payload, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Create the document
-    const doc = await Model.create(payload, options || {});
+    const doc = await Model.create(payload, options);
 
     // Optional cache invalidation (by key and/or prefix)
     if (invalidateKeys || invalidatePrefixes) {
@@ -584,6 +607,7 @@ const createOne = async (modelOrName, payload, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Remove fallback from options
  *******************************************************/
 const createMany = async (modelOrName, docs, writeArg) => {
   try {
@@ -598,7 +622,7 @@ const createMany = async (modelOrName, docs, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Insert the documents
-    const { ordered = true, ...rest } = options || {};
+    const { ordered = true, ...rest } = options;
     const res = await Model.insertMany(docs, { ordered, ...rest });
 
     // Optional cache invalidation (by key and/or prefix)
@@ -725,6 +749,7 @@ const getMany = async (modelOrName, filter, select = [], sort = { createdAt: -1 
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const updateOne = async (modelOrName, filter, data, writeArg) => {
   try {
@@ -739,7 +764,7 @@ const updateOne = async (modelOrName, filter, data, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Execute update with optional Mongoose options (e.g., session, runValidators)
-    const res = await Model.updateOne(filter, data, options || {});
+    const res = await Model.updateOne(filter, data, options);
 
     // Invalidate cache by exact keys and/or prefixes (if provided)
     if (invalidateKeys || invalidatePrefixes) {
@@ -770,6 +795,7 @@ const updateOne = async (modelOrName, filter, data, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const updateMany = async (modelOrName, filter, data, writeArg) => {
   try {
@@ -784,7 +810,7 @@ const updateMany = async (modelOrName, filter, data, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Update the documents
-    const res = await Model.updateMany(filter, data, options || {});
+    const res = await Model.updateMany(filter, data, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -814,6 +840,7 @@ const updateMany = async (modelOrName, filter, data, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const deleteOne = async (modelOrName, filter, writeArg) => {
   try {
@@ -828,7 +855,7 @@ const deleteOne = async (modelOrName, filter, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Delete the document
-    const res = await Model.deleteOne(filter, options || {});
+    const res = await Model.deleteOne(filter, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -858,6 +885,7 @@ const deleteOne = async (modelOrName, filter, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const deleteMany = async (modelOrName, filter, writeArg) => {
   try {
@@ -872,7 +900,7 @@ const deleteMany = async (modelOrName, filter, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Delete the documents
-    const res = await Model.deleteMany(filter, options || {});
+    const res = await Model.deleteMany(filter, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -903,6 +931,7 @@ const deleteMany = async (modelOrName, filter, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
+ * 19-08-2025: Removed fallback from options
  *******************************************************/
 const upsertOne = async (modelOrName, filter, data, writeArg) => {
   try {
@@ -917,7 +946,7 @@ const upsertOne = async (modelOrName, filter, data, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
 
     // Merge user-provided options with upsert:true (user options cannot disable upsert)
-    const opts = { upsert: true, ...(options || {}) };
+    const opts = { upsert: true, ...options };
 
     // Upsert the document
     const res = await Model.updateOne(filter, data, opts);
