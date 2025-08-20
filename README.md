@@ -130,8 +130,8 @@ db.setLogger((err, ctx) => {
   console.error("LOG:", ctx, err);
 });
 
-// Or adapt an object logger with .error():
-db.setLogger(console); // works because console.error exists
+// Or adapt an object logger
+db.setLogger(console.error);
 ```
 
 ### Cache injection (optional)
@@ -357,7 +357,6 @@ await db.invalidateCache({
   }
 }
 ```
-
 ---
 
 ## Error handling
@@ -396,7 +395,3 @@ MIT © [SalesPark](https://salespark.io)
 
 _Document version: 4_
 _Last update: 20-08-2025_
-
-```
-
-```
