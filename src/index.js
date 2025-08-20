@@ -706,8 +706,9 @@ const getOne = async (modelOrName, filter, select, cacheOpts) => {
  * @param {Object} cacheOpts - Cache options
  * History:
  * 14-08-2025: Created
+ * 20-08-2025: Updated (remove default sort)
  *******************************************************/
-const getMany = async (modelOrName, filter, select = [], sort = { createdAt: -1 }, cacheOpts) => {
+const getMany = async (modelOrName, filter, select = [], sort = {}, cacheOpts) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);
@@ -987,8 +988,9 @@ const upsertOne = async (modelOrName, filter, data, writeArg) => {
  * @param {Object} cacheOpts - Cache options
  * History:
  * 14-08-2025: Created
+ * 20-08-2025: Updated (remove default sort)
  *******************************************************/
-const getManyWithPagination = async (modelOrName, filter, select = [], sort = { createdAt: -1 }, page = 1, limit = 100, cacheOpts) => {
+const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}, page = 1, limit = 100, cacheOpts) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);

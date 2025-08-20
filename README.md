@@ -13,6 +13,28 @@ All exported functions return a consistent shape:
 - `status: true` → success, `data` holds the result
 - `status: false` → failure, `data` holds the error object
 
+### Examples (return shape):
+
+```js
+// getOne - document found
+{
+  status: true,
+  data: {
+    _id: "507f1f77bcf86cd799439011",
+    email: "user@example.com",
+    name: "John Doe",
+    createdAt: "2025-08-20T10:30:00.000Z"
+  }
+}
+
+// Error / Catch
+{
+  status: false,
+  data:  "<error content>"
+}
+
+```
+
 ---
 
 ## Installation
@@ -115,6 +137,7 @@ db.setLogger(console); // works because console.error exists
 ### Cache injection (optional)
 
 Provide an object with the interface `{ get(key), put(key, value, ttlMs), del(key), keys() }`.  
+If the provided cache doesn't have the required `get` function, it falls back to a no-op cache.
 If no cache is provided, reads run uncached and writes still work (they will try to invalidate only if a cache exists).
 
 ```js
@@ -132,6 +155,9 @@ db.setCache({
     /* ... */
   },
 });
+
+// Invalid cache will fallback to no-op
+db.setCache({}); // Falls back to no-op cache
 ```
 
 ---
@@ -193,6 +219,39 @@ await db.updateMany(
 - `getManyWithPagination(modelOrName, filter, select?, sort?, page?, limit?, cacheOpts?)`
 - `countDocuments(modelOrName, filter, cacheOpts?)`
 
+---
+
+### TTL (Time To Live) Support
+
+TTL accepts:
+
+- **number**: milliseconds (0 disables caching for most stores)
+- **string**: `"<int>[unit]"` where unit is `ms|s|m|h|d` (case-insensitive)
+  - Examples: `"500ms"`, `"30s"`, `"5m"`, `"4h"`, `"2d"`, `"60000"`
+  - Unit defaults to `ms` when omitted: `"60000"` = `"60000ms"`
+
+**Fallback behavior:**
+
+- Invalid/unparseable values → `DEFAULT_TTL` (60,000ms)
+- Negative numbers → 0 (no caching)
+- `null`/`undefined` → `DEFAULT_TTL`
+
+---
+
+### Monitoring & Metrics
+
+```js
+// Get current metrics
+const metrics = db.getMetrics();
+console.log("Cache hit rate:", metrics.cache.hits / (metrics.cache.hits + metrics.cache.misses));
+console.log("DB operations:", Object.keys(metrics.db.perOp));
+
+// Reset metrics (useful for periodic monitoring)
+db.resetMetrics();
+```
+
+---
+
 **Examples**
 
 ```js
@@ -253,6 +312,51 @@ await db.withTransaction(
 - `getMetrics()` — snapshot of DB/cache timings per operation
 - `resetMetrics()` — clears metrics
 - `resolveModel(modelOrName)` — resolves a model instance or requires from `<MODELS_DIR>/<name>`
+- `invalidateCache(input)` — manually invalidate cache by keys and/or prefixes
+
+**invalidateCache examples:**
+
+```js
+// Invalidate specific keys
+await db.invalidateCache("user:123");
+await db.invalidateCache(["user:123", "user:456"]);
+
+// Invalidate by prefixes
+await db.invalidateCache({ prefixes: "orders:list:" });
+
+// Combined
+await db.invalidateCache({
+  keys: ["user:123"],
+  prefixes: ["orders:", "products:"],
+});
+```
+
+---
+
+### Metrics Structure
+
+`getMetrics()` returns:
+
+```js
+{
+  cache: {
+    hits: number,
+    misses: number,
+    puts: number,
+    invalidations: number
+  },
+  db: {
+    perOp: {
+      "operationName:modelName": {
+        count: number,
+        totalMs: number,
+        minMs: number,
+        maxMs: number
+      }
+    }
+  }
+}
+```
 
 ---
 
@@ -290,5 +394,9 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 4_  
+_Document version: 4_
 _Last update: 20-08-2025_
+
+```
+
+```
