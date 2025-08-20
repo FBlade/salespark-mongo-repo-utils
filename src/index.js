@@ -36,19 +36,21 @@ const getModelsDir = () => {
   throw new Error("MODELS_DIR not set. Use setModelsDir('/path/to/models') or define env SP_MONGO_REPO_MODELS_DIR");
 };
 
+// Define noop logger
+const noopLogger = () => {};
+let logger = noopLogger;
+
 /*******************************************************
  * ##: Logger injection
- * Default: noop logger. Users can inject any logger with .error() signature.
- * e.g., setLogger(console) or setLogger(pinoInstance)
+ * Set the logger function.
+ * Accepts any function. If not a function, falls back to noop.
  * History:
  * 16-08-2025: Created
+ * 20-08-2025: Updated
  *******************************************************/
-const noopLogger = { error: () => {} };
-let logger = noopLogger;
 const setLogger = (_logger) => {
-  logger = _logger && typeof _logger.error === "function" ? _logger : noopLogger;
+  logger = typeof _logger === "function" ? _logger : noopLogger;
 };
-
 /*******************************************************
  * ##: Cache injection
  * Default: disabled. Users can inject any cache interface
@@ -208,6 +210,7 @@ const _parseWriteArg = (arg) => {
  * History:
  * 14-08-2025: Created
  * 19-08-2025: Fix model resolution logic and removed modelCache
+ * 20-08-2025: Fix model directory resolution (from env variable)
  ****************************************************/
 const resolveModel = (modelOrName) => {
   // Case 1: Provided directly as a Model constructor
@@ -227,6 +230,11 @@ const resolveModel = (modelOrName) => {
   // Step 4: Try mongoose registry
   if (mongoose.models[name]) {
     return mongoose.models[name];
+  }
+
+  // Check if Model dir exists
+  if (!MODELS_DIR) {
+    setModelsDir(getModelsDir());
   }
 
   // Step 5: Require model file
