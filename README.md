@@ -270,6 +270,19 @@ await repo.withTransaction(
 
 ---
 
+### 🔒 Internal Usage Notice
+
+This package is primarily designed and maintained for internal use within the SalesPark ecosystem.
+While it can technically be used in other Node.js/Mongoose projects, no official support or guarantees are provided outside of SalesPark-managed projects.
+
+All code follows the same engineering standards applied across the SalesPark platform, ensuring consistency, reliability, and long-term maintainability of our internal systems.
+
+⚡ Note: This package is most efficient and works best when used together with other official SalesPark packages, where interoperability and optimizations are fully leveraged.
+
+Disclaimer: This software is provided “as is”, without warranties of any kind, express or implied. SalesPark shall not be held liable for any issues, damages, or losses arising from its use outside the intended SalesPark environment.
+
+---
+
 ## 📄 License
 
 MIT © [SalesPark](https://salespark.io)
