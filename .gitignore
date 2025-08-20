@@ -27,3 +27,6 @@ config.ts
 # built files
 /dist
 
+
+# Yarn/NPM pack tarballs
+*.tgz

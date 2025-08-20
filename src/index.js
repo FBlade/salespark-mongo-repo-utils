@@ -238,7 +238,7 @@ const resolveModel = (modelOrName) => {
   }
 
   // Step 5: Require model file
-  const candidatePath = path.join(MODELS_DIR, name);
+  const candidatePath = path.join(process.cwd(), MODELS_DIR, name);
   const exported = require(candidatePath);
 
   // Step 6: Check registry again (never trust direct require return)

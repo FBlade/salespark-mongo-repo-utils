@@ -18,9 +18,9 @@ All exported functions return a consistent shape:
 ## Installation
 
 ```bash
-npm install @salespark/mongo-repo-utils
-# or
 yarn add @salespark/mongo-repo-utils
+# or
+npm install @salespark/mongo-repo-utils
 ```
 
 Peer requirement:
@@ -33,25 +33,26 @@ Peer requirement:
 
 ```js
 const path = require("path");
-const repo = require("@salespark/mongo-repo-utils");
+const db = require("@salespark/mongo-repo-utils");
 
 // 1) Tell the repo where your models live
-repo.setModelsDir(path.join(__dirname, "models"));
-// or via environment variable:
-// export SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
+db.setModelsDir(path.join(__dirname, "models"));
+
+// or via environment variable (.env):
+// SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 
 // 2) (Optional) Inject a logger
 // Preferred: a function (err, ctx) => void
-repo.setLogger((err, ctx) => {
+db.setLogger((err, ctx) => {
   console.error("LOG:", ctx, err);
 });
 
-// Alternative: an object with .error(), e.g. console
-repo.setLogger(console);
+// Alternative: an object, e.g. console
+db.setLogger(console);
 
 // 3) (Optional) Inject a cache with { get, put, del, keys }
 const simpleCache = new Map();
-repo.setCache({
+db.setCache({
   get: (k) => simpleCache.get(k),
   put: (k, v, ttlMs) => {
     simpleCache.set(k, v);
@@ -63,7 +64,7 @@ repo.setCache({
 
 // 4) Use repository helpers
 (async () => {
-  const r = await repo.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: 120_000 });
+  const r = await db.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: 120_000 });
   if (!r.status) {
     console.error("Failed:", r.data);
   } else {
@@ -85,9 +86,9 @@ Priority:
 3. Otherwise an error is thrown on first model resolution
 
 ```js
-repo.setModelsDir(path.join(__dirname, "models"));
-// or
-// export SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
+db.setModelsDir(path.join(__dirname, "models"));
+// or via environment variable (.env):
+// SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 ```
 
 **Resolution rules:**
@@ -103,12 +104,12 @@ repo.setModelsDir(path.join(__dirname, "models"));
 Preferred: provide a function `(err, ctx) => void`.
 
 ```js
-repo.setLogger((err, ctx) => {
+db.setLogger((err, ctx) => {
   console.error("LOG:", ctx, err);
 });
 
 // Or adapt an object logger with .error():
-repo.setLogger(console); // works because console.error exists
+db.setLogger(console); // works because console.error exists
 ```
 
 ### Cache injection (optional)
@@ -117,7 +118,7 @@ Provide an object with the interface `{ get(key), put(key, value, ttlMs), del(ke
 If no cache is provided, reads run uncached and writes still work (they will try to invalidate only if a cache exists).
 
 ```js
-repo.setCache({
+db.setCache({
   get: (key) => {
     /* ... */
   },
@@ -166,10 +167,10 @@ Examples:
 
 ```js
 // Invalidate a specific key (legacy style)
-await repo.updateOne("users", { _id }, { $set: { name: "Alice" } }, "user:42");
+await db.updateOne("users", { _id }, { $set: { name: "Alice" } }, "user:42");
 
 // Combined: runValidators + invalidate prefixes
-await repo.updateMany(
+await db.updateMany(
   "orders",
   { status: "processing" },
   { $set: { status: "paid" } },
@@ -195,16 +196,16 @@ await repo.updateMany(
 **Examples**
 
 ```js
-await repo.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: "1h" });
+await db.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: "1h" });
 
-await repo.getMany("orders", { status: "paid" }, ["_id", "total"], { createdAt: -1 }, { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 });
+await db.getMany("orders", { status: "paid" }, ["_id", "total"], { createdAt: -1 }, { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 });
 
-const paged = await repo.getManyWithPagination("products", { active: true }, ["_id", "title"], { createdAt: -1 }, 2, 20, {
+const paged = await db.getManyWithPagination("products", { active: true }, ["_id", "title"], { createdAt: -1 }, 2, 20, {
   enabled: true,
   key: "products:active:p2:l20",
 });
 
-await repo.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: "5m" });
+await db.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: "5m" });
 ```
 
 ### Write
@@ -220,11 +221,11 @@ await repo.countDocuments("orders", { status: "processing" }, { enabled: true, t
 **Examples**
 
 ```js
-await repo.createOne("logs", { type: "signup", user: userId });
+await db.createOne("logs", { type: "signup", user: userId });
 
-await repo.createMany("products", [{ sku: "X" }, { sku: "Y" }], { options: { ordered: false, runValidators: true } });
+await db.createMany("products", [{ sku: "X" }, { sku: "Y" }], { options: { ordered: false, runValidators: true } });
 
-await repo.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { invalidatePrefixes: ["inventory:"] });
+await db.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { invalidatePrefixes: ["inventory:"] });
 ```
 
 ### Transactions
@@ -232,15 +233,15 @@ await repo.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, {
 - `withTransaction(workFn, txOptions?)`
 
 ```js
-await repo.withTransaction(
+await db.withTransaction(
   async (session) => {
-    const a = await repo.updateOne("wallets", { _id: fromId }, { $inc: { balance: -100 } }, { session });
+    const a = await db.updateOne("wallets", { _id: fromId }, { $inc: { balance: -100 } }, { session });
     if (!a.status) throw a.data;
 
-    const b = await repo.updateOne("wallets", { _id: toId }, { $inc: { balance: +100 } }, { session });
+    const b = await db.updateOne("wallets", { _id: toId }, { $inc: { balance: +100 } }, { session });
     if (!b.status) throw b.data;
 
-    await repo.createOne("transfers", { fromId, toId, amount: 100 }, { session });
+    await db.createOne("transfers", { fromId, toId, amount: 100 }, { session });
   },
   { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
 );
@@ -289,5 +290,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 3_  
-_Last update: 19-08-2025_
+_Document version: 4_  
+_Last update: 20-08-2025_
