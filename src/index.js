@@ -29,11 +29,12 @@ const setModelsDir = (dir) => {
  * Get the current models directory
  * History:
  * 16-08-2025: Created
+ * 20-08-2025: Updated (Add fallback to default models directory)
  *******************************************************/
 const getModelsDir = () => {
   if (MODELS_DIR) return MODELS_DIR;
   if (process.env.SP_MONGO_REPO_MODELS_DIR) return process.env.SP_MONGO_REPO_MODELS_DIR;
-  throw new Error("MODELS_DIR not set. Use setModelsDir('/path/to/models') or define env SP_MONGO_REPO_MODELS_DIR");
+  return "./models"; // Default models directory
 };
 
 // Define noop logger
@@ -747,6 +748,52 @@ const getMany = async (modelOrName, filter, select = [], sort = {}, cacheOpts) =
 };
 
 /*******************************************************
+ * ##: Aggregate documents in a model
+ * Executes a MongoDB aggregation pipeline.
+ * @param {Object|String} modelOrName - Model instance or name
+ * @param {Array<Object>} pipeline - Aggregation pipeline stages
+ * @param {Object} cacheOpts - Cache options
+ * History:
+ * 21-08-2025: Created
+ *******************************************************/
+const aggregate = async (modelOrName, pipeline, cacheOpts) => {
+  try {
+    // Resolve the model (cached)
+    const Model = resolveModel(modelOrName);
+
+    // Build operation name and start time
+    const opName = `aggregate:${normalizeModelName(Model)}`;
+    const start = _nowNs();
+
+    // Use cache only if cacheOpts is defined/active
+    if (cacheOpts?.enabled) {
+      return await withCache("aggregate", [modelOrName, pipeline], cacheOpts, async () => {
+        // Execute the aggregation
+        const result = await Model.aggregate(pipeline).exec();
+
+        // Record database operation metrics
+        _recordDb(opName, start);
+
+        // Return the result
+        return ok(result);
+      });
+    }
+
+    // Execute the aggregation without cache
+    const result = await Model.aggregate(pipeline).exec();
+
+    // Record database operation metrics
+    _recordDb(opName, start);
+
+    // Return the result
+    return ok(result);
+
+    // Error handling
+  } catch (err) {
+    return fail(err, "aggregate");
+  }
+};
+/*******************************************************
  * ##: Update a single document in a model
  * @param {Object|String} modelOrName - Model instance or name
  * @param {Object} filter - Filter Object
@@ -1120,6 +1167,7 @@ module.exports = {
   getOne,
   getMany,
   getManyWithPagination,
+  aggregate,
   updateOne,
   updateMany,
   deleteOne,

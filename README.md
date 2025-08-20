@@ -216,39 +216,9 @@ await db.updateMany(
 
 - `getOne(modelOrName, filter, select?, cacheOpts?)`
 - `getMany(modelOrName, filter, select?, sort?, cacheOpts?)`
+- `aggregate(modelOrName, pipeline, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
 - `getManyWithPagination(modelOrName, filter, select?, sort?, page?, limit?, cacheOpts?)`
 - `countDocuments(modelOrName, filter, cacheOpts?)`
-
----
-
-### TTL (Time To Live) Support
-
-TTL accepts:
-
-- **number**: milliseconds (0 disables caching for most stores)
-- **string**: `"<int>[unit]"` where unit is `ms|s|m|h|d` (case-insensitive)
-  - Examples: `"500ms"`, `"30s"`, `"5m"`, `"4h"`, `"2d"`, `"60000"`
-  - Unit defaults to `ms` when omitted: `"60000"` = `"60000ms"`
-
-**Fallback behavior:**
-
-- Invalid/unparseable values → `DEFAULT_TTL` (60,000ms)
-- Negative numbers → 0 (no caching)
-- `null`/`undefined` → `DEFAULT_TTL`
-
----
-
-### Monitoring & Metrics
-
-```js
-// Get current metrics
-const metrics = db.getMetrics();
-console.log("Cache hit rate:", metrics.cache.hits / (metrics.cache.hits + metrics.cache.misses));
-console.log("DB operations:", Object.keys(metrics.db.perOp));
-
-// Reset metrics (useful for periodic monitoring)
-db.resetMetrics();
-```
 
 ---
 
@@ -258,6 +228,8 @@ db.resetMetrics();
 await db.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: "1h" });
 
 await db.getMany("orders", { status: "paid" }, ["_id", "total"], { createdAt: -1 }, { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 });
+
+await db.aggregate("orders", [{ $match: { status: "paid" } }, { $group: { _id: "$userId", total: { $sum: "$amount" } } }], { enabled: true, ttl: "5m" });
 
 const paged = await db.getManyWithPagination("products", { active: true }, ["_id", "title"], { createdAt: -1 }, 2, 20, {
   enabled: true,
@@ -333,6 +305,20 @@ await db.invalidateCache({
 
 ---
 
+### Monitoring & Metrics
+
+```js
+// Get current metrics
+const metrics = db.getMetrics();
+console.log("Cache hit rate:", metrics.cache.hits / (metrics.cache.hits + metrics.cache.misses));
+console.log("DB operations:", Object.keys(metrics.db.perOp));
+
+// Reset metrics (useful for periodic monitoring)
+db.resetMetrics();
+```
+
+---
+
 ### Metrics Structure
 
 `getMetrics()` returns:
@@ -357,6 +343,24 @@ await db.invalidateCache({
   }
 }
 ```
+
+---
+
+### TTL (Time To Live) Support
+
+TTL accepts:
+
+- **number**: milliseconds (0 disables caching for most stores)
+- **string**: `"<int>[unit]"` where unit is `ms|s|m|h|d` (case-insensitive)
+  - Examples: `"500ms"`, `"30s"`, `"5m"`, `"4h"`, `"2d"`, `"60000"`
+  - Unit defaults to `ms` when omitted: `"60000"` = `"60000ms"`
+
+**Fallback behavior:**
+
+- Invalid/unparseable values → `DEFAULT_TTL` (60,000ms)
+- Negative numbers → 0 (no caching)
+- `null`/`undefined` → `DEFAULT_TTL`
+
 ---
 
 ## Error handling
@@ -385,6 +389,8 @@ All code follows the same engineering standards applied across the SalesPark pla
 
 Disclaimer: This software is provided “as is”, without warranties of any kind, express or implied. SalesPark shall not be held liable for any issues, damages, or losses arising from its use outside the intended SalesPark environment.
 
+Organization packages: https://www.npmjs.com/org/salespark
+
 ---
 
 ## 📄 License
@@ -393,5 +399,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 4_
-_Last update: 20-08-2025_
+_Document version: 5_  
+_Last update: 21-08-2025_
