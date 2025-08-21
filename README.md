@@ -4,6 +4,22 @@
 
 Utility helpers for MongoDB/Mongoose repositories with caching hooks, metrics, safe return contract, and flexible model resolution.
 
+---
+
+## 📦 Installation
+
+```bash
+yarn add @salespark/mongo-repo-utils
+# or
+npm install @salespark/mongo-repo-utils
+```
+
+Peer requirement:
+
+- `mongoose >= 7`
+
+---
+
 All exported functions return a consistent shape:
 
 ```js
@@ -34,20 +50,6 @@ All exported functions return a consistent shape:
 }
 
 ```
-
----
-
-## Installation
-
-```bash
-yarn add @salespark/mongo-repo-utils
-# or
-npm install @salespark/mongo-repo-utils
-```
-
-Peer requirement:
-
-- `mongoose >= 7`
 
 ---
 

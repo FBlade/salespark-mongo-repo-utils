@@ -4,3 +4,16 @@ node_modules
 *.log
 .vscode
 *.tgz
+test/
+tests/
+dist/
+build/
+example/
+examples/
+scripts/
+.idea/
+.env
+.gitignore
+.npmignore
+.editorconfig
+coverage/

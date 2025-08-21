@@ -652,45 +652,49 @@ const createMany = async (modelOrName, docs, writeArg) => {
 };
 
 /*******************************************************
- * ##: Get a single document from a model
+ * ##: Get a single document from a model (with populate - optional)
+ * Resolve a model and retrieve a single document, with optional
+ * field selection, population of references, and caching.
+ *
  * @param {Object|String} modelOrName - Model instance or name
  * @param {Object} filter - Filter Object
- * @param {Array} select - Fields to select
+ * @param {Array|String} select - Fields to select
  * @param {Object} cacheOpts - Cache options
+ * @param {Array|Object|String} populate - Populate definition(s)
+ *
  * History:
  * 14-08-2025: Created
+ * 21-08-2025: Added populate support
  *******************************************************/
-const getOne = async (modelOrName, filter, select, cacheOpts) => {
+const getOne = async (modelOrName, filter, select, cacheOpts, populate) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);
 
-    // Build operation name and start time
+    // Build operation name and record start time
     const opName = `getOne:${normalizeModelName(Model)}`;
     const start = _nowNs();
 
-    // Use cache only if cacheOpts is defined/active
+    // Query executor (with populate support)
+    const runQuery = async () => {
+      let query = Model.findOne(filter, select);
+      if (populate) query = query.populate(populate);
+      const doc = await query.lean();
+
+      // Record database operation metrics
+      _recordDb(opName, start);
+
+      // Return the found document
+      return ok(doc);
+    };
+
+    // If caching is enabled, wrap query with cache logic
     if (cacheOpts?.enabled) {
-      return await withCache("getOne", [modelOrName, filter, select], cacheOpts, async () => {
-        // Find the document
-        const doc = await Model.findOne(filter, select).lean();
-
-        // Record database operation metrics
-        _recordDb(opName, start);
-
-        // Return the found document
-        return ok(doc);
-      });
+      return await withCache("getOne", [modelOrName, filter, select, populate], cacheOpts, runQuery);
     }
 
-    // Find the document without cache
-    const doc = await Model.findOne(filter, select).lean();
-
-    // Record database operation metrics
-    _recordDb(opName, start);
-
-    // Return the found document
-    return ok(doc);
+    // Execute query without cache
+    return await runQuery();
 
     // Error handling
   } catch (err) {
