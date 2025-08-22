@@ -30,3 +30,6 @@ config.ts
 
 # Yarn/NPM pack tarballs
 *.tgz
+
+# Others
+build-tgz.sh

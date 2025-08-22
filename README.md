@@ -32,14 +32,14 @@ All exported functions return a consistent shape:
 ### Examples (return shape):
 
 ```js
-// getOne - document found
+ // getOne - document found
 {
   status: true,
   data: {
     _id: "507f1f77bcf86cd799439011",
     email: "user@example.com",
     name: "John Doe",
-    createdAt: "2025-08-20T10:30:00.000Z"
+    createdAt: "2024-08-20T10:30:00.000Z"
   }
 }
 
@@ -87,8 +87,19 @@ db.setCache({
 });
 
 // 4) Use repository helpers
+// With parameters
 (async () => {
   const r = await db.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: 120_000 });
+  if (!r.status) {
+    console.error("Failed:", r.data);
+  } else {
+    console.log("User:", r.data);
+  }
+})();
+
+// With object
+(async () => {
+  const r = await db.getOne({ model: "users", filter: { email: "a@b.com" }, cacheOpts: { enabled: true, ttl: 120_000 } });
   if (!r.status) {
     console.error("Failed:", r.data);
   } else {
@@ -217,18 +228,18 @@ await db.updateMany(
 
 ### Read
 
-- `getOne(modelOrName, filter, select?, populate?, cacheOpts?)`
-- `getMany(modelOrName, filter, select?, sort?, populate?, cacheOpts?)`
-- `aggregate(modelOrName, pipeline, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
-- `getManyWithPagination(modelOrName, filter, select?, sort?, page?, limit?, populate?, cacheOpts?)`
-- `countDocuments(modelOrName, filter, cacheOpts?)`
+- `getOne(modelOrObj, filter?, select?, populate?, cacheOpts?)`
+- `getMany(modelOrObj, filter?, select?, sort?, populate?, cacheOpts?)`
+- `aggregate(modelOrObj, pipeline?, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
+- `getManyWithPagination(modelOrObj, filter?, select?, sort?, page?, limit?, populate?, cacheOpts?)`
+- `countDocuments(modelOrObj, filter?, cacheOpts?)`
 
 ---
 
 **Examples**
 
 ```js
-// getOne with populate
+// getOne with populate (parameters)
 await db.getOne(
   "orders", // collection
   { _id: "123" }, // filter
@@ -237,7 +248,10 @@ await db.getOne(
   { enabled: true, ttl: "1h" } // cache
 );
 
-// getMany with single populate
+// getOne with populate (object)
+await db.getOne({ model: "orders", filter: { _id: "123" }, populate: { path: "customer", select: "name email" }, cacheOpts: { enabled: true, ttl: "1h" } });
+
+// getMany with single populate (parameters)
 await db.getMany(
   "orders", // collection
   { status: "paid" }, // filter
@@ -247,7 +261,17 @@ await db.getMany(
   { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 } // cache
 );
 
-// getMany with multiple populates
+// getMany with single populate (object)
+await db.getMany({
+  model: "orders",
+  filter: { status: "paid" },
+  select: ["_id", "total"],
+  sort: { createdAt: -1 },
+  populate: { path: "customer", select: "name email" },
+  cacheOpts: { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 },
+});
+
+// getMany with multiple populates (parameters)
 await db.getMany(
   "orders", // collection
   { status: "paid" }, // filter
@@ -261,10 +285,30 @@ await db.getMany(
   { enabled: true } // cache
 );
 
-// aggregate
+// getMany with multiple populates (object)
+await db.getMany({
+  model: "orders",
+  filter: { status: "paid" },
+  select: ["_id", "total"],
+  sort: { createdAt: -1 },
+  populate: [
+    { path: "products", select: ["field1", "field2"] },
+    { path: "customer", select: "name email" },
+  ],
+  cacheOpts: { enabled: true },
+});
+
+// aggregate (parameters)
 await db.aggregate("orders", [{ $match: { status: "paid" } }, { $group: { _id: "$userId", total: { $sum: "$amount" } } }], { enabled: true, ttl: "5m" });
 
-// getManyWithPagination with populate
+// aggregate (object)
+await db.aggregate({
+  model: "orders",
+  pipeline: [{ $match: { status: "paid" } }, { $group: { _id: "$userId", total: { $sum: "$amount" } } }],
+  cacheOpts: { enabled: true, ttl: "5m" },
+});
+
+// getManyWithPagination with populate (parameters)
 const paged = await db.getManyWithPagination(
   "products", // collection
   { active: true }, // filter
@@ -276,7 +320,19 @@ const paged = await db.getManyWithPagination(
   { enabled: true, key: "products:active:p2:l20" } // cache
 );
 
-// getManyWithPagination with multiple populates
+// getManyWithPagination with populate (object)
+const paged = await db.getManyWithPagination({
+  model: "products",
+  filter: { active: true },
+  select: ["_id", "title"],
+  sort: { createdAt: -1 },
+  page: 2,
+  limit: 20,
+  populate: { path: "category", select: "name" },
+  cacheOpts: { enabled: true, key: "products:active:p2:l20" },
+});
+
+// getManyWithPagination with multiple populates (parameters)
 const pagedMulti = await db.getManyWithPagination(
   "orders", // collection
   { status: "active" }, // filter
@@ -292,28 +348,58 @@ const pagedMulti = await db.getManyWithPagination(
   { enabled: true } // cache
 );
 
-// countDocuments
+// getManyWithPagination with multiple populates (object)
+const pagedMulti = await db.getManyWithPagination({
+  model: "orders",
+  filter: { status: "active" },
+  select: ["_id", "total"],
+  sort: { createdAt: -1 },
+  page: 1,
+  limit: 10,
+  populate: [
+    { path: "products", select: ["field1", "field2"] },
+    { path: "customer", select: "name email" },
+  ],
+  cacheOpts: { enabled: true },
+});
+
+// countDocuments (parameters)
 await db.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: "5m" });
+
+// countDocuments (object)
+await db.countDocuments({ model: "orders", filter: { status: "processing" }, cacheOpts: { enabled: true, ttl: "5m" } });
 ```
 
 ### Write
 
-- `createOne(modelOrName, payload, writeArg?)`
-- `createMany(modelOrName, docs, writeArg?)`
-- `updateOne(modelOrName, filter, data, writeArg?)`
-- `updateMany(modelOrName, filter, data, writeArg?)`
-- `deleteOne(modelOrName, filter, writeArg?)`
-- `deleteMany(modelOrName, filter, writeArg?)`
-- `upsertOne(modelOrName, filter, data, writeArg?)` (always enforces `{ upsert: true }`)
+- `createOne(modelOrObj, payload?, writeArg?)`
+- `createMany(modelOrObj, docs?, writeArg?)`
+- `updateOne(modelOrObj, filter?, data?, writeArg?)`
+- `updateMany(modelOrObj, filter?, data?, writeArg?)`
+- `deleteOne(modelOrObj, filter?, writeArg?)`
+- `deleteMany(modelOrObj, filter?, writeArg?)`
+- `upsertOne(modelOrObj, filter?, data?, writeArg?)` (always enforces `{ upsert: true }`)
 
 **Examples**
 
 ```js
+// createOne (parameters)
 await db.createOne("logs", { type: "signup", user: userId });
 
+// createOne (object)
+await db.createOne({ model: "logs", payload: { type: "signup", user: userId } });
+
+// createMany (parameters)
 await db.createMany("products", [{ sku: "X" }, { sku: "Y" }], { options: { ordered: false, runValidators: true } });
 
+// createMany (object)
+await db.createMany({ model: "products", docs: [{ sku: "X" }, { sku: "Y" }], writeArg: { options: { ordered: false, runValidators: true } } });
+
+// upsertOne (parameters)
 await db.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { invalidatePrefixes: ["inventory:"] });
+
+// upsertOne (object)
+await db.upsertOne({ model: "inventory", filter: { sku: "ABC-001" }, data: { $inc: { stock: 10 } }, writeArg: { invalidatePrefixes: ["inventory:"] } });
 ```
 
 ### Transactions
@@ -321,6 +407,7 @@ await db.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { i
 - `withTransaction(workFn, txOptions?)`
 
 ```js
+// withTransaction (parameters)
 await db.withTransaction(
   async (session) => {
     const a = await db.updateOne("wallets", { _id: fromId }, { $inc: { balance: -100 } }, { session });
@@ -330,6 +417,20 @@ await db.withTransaction(
     if (!b.status) throw b.data;
 
     await db.createOne("transfers", { fromId, toId, amount: 100 }, { session });
+  },
+  { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
+);
+
+// withTransaction (object)
+await db.withTransaction(
+  async (session) => {
+    const a = await db.updateOne({ model: "wallets", filter: { _id: fromId }, data: { $inc: { balance: -100 } }, writeArg: { session } });
+    if (!a.status) throw a.data;
+
+    const b = await db.updateOne({ model: "wallets", filter: { _id: toId }, data: { $inc: { balance: +100 } }, writeArg: { session } });
+    if (!b.status) throw b.data;
+
+    await db.createOne({ model: "transfers", payload: { fromId, toId, amount: 100 }, writeArg: { session } });
   },
   { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
 );

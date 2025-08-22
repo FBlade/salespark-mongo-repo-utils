@@ -1,5 +1,6 @@
 const path = require("path");
 const mongoose = require("mongoose");
+const fs = require("fs"); //required for fs.promises
 
 // Define default time-to-live for cache in milliseconds
 const DEFAULT_TTL = 60_000;
@@ -19,9 +20,12 @@ let MODELS_DIR = null;
  * @param {String} dir - The models directory
  * History:
  * 16-08-2025: Created
+ * 22-08-2025: Updated (Add validation)
  *******************************************************/
 const setModelsDir = (dir) => {
+  if (typeof dir !== "string") return fail(new Error("Directory must be a string"), "setModelsDir");
   MODELS_DIR = dir;
+  return ok({ message: "Models directory set" });
 };
 
 /*******************************************************
@@ -48,9 +52,11 @@ let logger = noopLogger;
  * History:
  * 16-08-2025: Created
  * 20-08-2025: Updated
+ * 22-08-2025: Updated (Add validation)
  *******************************************************/
 const setLogger = (_logger) => {
   logger = typeof _logger === "function" ? _logger : noopLogger;
+  return ok({ message: "Logger set" });
 };
 /*******************************************************
  * ##: Cache injection
@@ -59,11 +65,12 @@ const setLogger = (_logger) => {
  * e.g., setCache(memCacheInstance)
  * History:
  * 16-08-2025: Created
+ * 22-08-2025: Updated (Add validation)
  *******************************************************/
 const noopCache = {
   get: () => undefined,
-  put: () => {},
-  del: () => {},
+  put: () => false, // Return false to indicate no-op (no caching occurred)
+  del: () => false, // Return false to indicate no deletion occurred
   keys: () => [],
 };
 let cache = noopCache;
@@ -74,13 +81,16 @@ let cache = noopCache;
  * @param {Object} _cache - The cache interface
  * History:
  * 16-08-2025: Created
+ * 22-08-2025: Updated (Add validation)
  *******************************************************/
 const setCache = (_cache) => {
-  // must have at least get/put/del/keys functions
-  if (_cache && typeof _cache.get === "function") {
+  // Check all required methods (get, put, del, keys)
+  if (_cache && typeof _cache.get === "function" && typeof _cache.put === "function" && typeof _cache.del === "function" && typeof _cache.keys === "function") {
     cache = _cache;
+    return ok({ message: "Cache interface set successfully" }); // Follow contract with success return
   } else {
     cache = noopCache;
+    return fail(new Error("Invalid cache interface: must have get, put, del, and keys methods"), "setCache");
   }
 };
 
@@ -90,44 +100,73 @@ const METRICS = {
   db: { perOp: {} }, // { "getOne:users": { count, totalMs, minMs, maxMs } }
 };
 
-// Helper function to get current time in nanoseconds
-const _nowNs = () => (typeof process?.hrtime?.bigint === "function" ? process.hrtime.bigint() : null);
+// Helper function to get current time in milliseconds (fallback for older Node.js)
+const _nowMs = () => Date.now(); // Simple fallback using Date.now() for ms precision
+
+// Helper function to get high-resolution time (bigint if available, else fallback to ms)
+const _nowNs = () => {
+  if (typeof process?.hrtime?.bigint === "function") {
+    return process.hrtime.bigint(); // High precision (ns)
+  }
+  return BigInt(_nowMs() * 1e6); // Fallback to ms converted to ns (approximate)
+};
 
 // Helper function to record database operation metrics
 const _recordDb = (opName, startNs) => {
   try {
-    if (!startNs) return;
-    const durMs = Number(process.hrtime.bigint() - startNs) / 1e6;
+    if (!startNs) return; // Early exit if no start time
+
+    const endNs = _nowNs(); // Get end time consistently
+    let durMs = Number((endNs - startNs) / 1_000_000n); // Convert BigInt ns to ms
+
+    // Safeguard against NaN (e.g., from fallback mismatches)
+    if (Number.isNaN(durMs)) {
+      durMs = 0; // Set to 0 instead of NaN to keep metrics clean
+    }
+
     const b = (METRICS.db.perOp[opName] ||= { count: 0, totalMs: 0, minMs: Infinity, maxMs: 0 });
     b.count += 1;
     b.totalMs += durMs;
     if (durMs < b.minMs) b.minMs = durMs;
     if (durMs > b.maxMs) b.maxMs = durMs;
-  } catch (_) {}
+  } catch (_) {
+    // Ignore errors silently
+  }
 };
 
-// Helper function to get current metrics
-const getMetrics = () => JSON.parse(JSON.stringify(METRICS));
+/*******************************************************
+ * ##: Get Metrics
+ * Helper function to get current metrics
+ * History:
+ * 16-08-2025: Created
+ * 22-08-2025: Updated (Add validation)
+ *******************************************************/
+const getMetrics = () => ok(JSON.parse(JSON.stringify(METRICS)));
 
-// Helper function to reset metrics
+/*******************************************************
+ * ##: Reset Metrics
+ * Helper function to reset metrics
+ * History:
+ * 16-08-2025: Created
+ * 22-08-2025: Updated (Add validation)
+ *******************************************************/
 const resetMetrics = () => {
   METRICS.cache = { hits: 0, misses: 0, puts: 0, invalidations: 0 };
   METRICS.db = { perOp: {} };
+  return ok({ message: "Metrics reset" });
 };
 
 // Helper functions for response handling
 const ok = (data) => ({ status: true, data });
 const fail = (err, ctx) => (logger(err, ctx), { status: false, data: err });
 
-/*******************************************************
- * ##: Normalize Model or Name
- * Normalize a Mongoose model or its name
- * @param {Any} modelOrName - Model or name
- * History:
- * 14-08-2025: Created
- *******************************************************/
-const normalizeModelName = (modelOrName) => {
-  return typeof modelOrName === "string" ? modelOrName : modelOrName?.modelName || "Model";
+// Helper function to check Mongoose connection state
+const _checkConnection = (ctx) => {
+  if (mongoose.connection.readyState !== 1) {
+    // 1 = connected
+    return fail(new Error("Mongoose is not connected. Ensure mongoose.connect() is called before operations."), `${ctx}/connection`);
+  }
+  return { status: true }; // Success (proceed)
 };
 
 /*******************************************************
@@ -187,9 +226,7 @@ const _parseWriteArg = (arg) => {
 
 /****************************************************
  * ##: Resolve a Mongoose Model
- * Resolve a Mongoose Model from:
- *   - A Model instance, or
- *   - An exact model name (string).
+ * Resolve a Mongoose Model from an exact model name (string).
  *
  * Assumptions:
  * - The provided name matches exactly the registered model name in mongoose.models
@@ -197,38 +234,32 @@ const _parseWriteArg = (arg) => {
  * - No heuristics beyond optional pluralization. No fuzzy matching, no case conversion.
  *
  * Resolution logic:
- * 1. If a Model (function with .modelName) is provided directly, return it.
- * 2. If a document/instance is provided, return its constructor (the actual Model).
- * 3. Otherwise, coerce to string and pluralize if needed (append "s").
- * 4. Check if the Model is already in mongoose.models registry → return it.
- * 5. Require the corresponding file under MODELS_DIR.
+ * 1. Accepts only a string as model name. Throws if not string.
+ * 2. Pluralizes the name if needed (appends "s").
+ * 3. Checks mongoose.models registry for the model.
+ * 4. Requires the corresponding file under MODELS_DIR if not found.
  *    Expectation: this file either registers the Model into mongoose.models
  *    OR directly exports the Model.
- * 6. Re-check mongoose.models registry. If found, return it.
- * 7. If not found but the module export is itself a Model, return it.
- * 8. Otherwise, throw descriptive error.
- * @param {Any} modelOrName - Model instance or name
+ * 5. Re-checks mongoose.models registry. If found, returns it.
+ * 6. If not found but the module export is itself a Model, returns it.
+ * 7. Otherwise, throws descriptive error.
+ * @param {String} model - Model name (string)
  * History:
  * 14-08-2025: Created
  * 19-08-2025: Fix model resolution logic and removed modelCache
  * 20-08-2025: Fix model directory resolution (from env variable)
+ * 22-08-2025: Accept only string as model name
  ****************************************************/
-const resolveModel = (modelOrName) => {
-  // Case 1: Provided directly as a Model constructor
-  if (typeof modelOrName === "function" && modelOrName.modelName) {
-    return modelOrName;
+const resolveModel = (model) => {
+  // Only accept string for model name
+  if (typeof model !== "string") {
+    throw new Error("resolveModel: model must be a string");
   }
 
-  // Case 2: Provided as a document/instance → return its constructor
-  if (typeof modelOrName === "object" && modelOrName?.constructor?.modelName) {
-    return modelOrName.constructor;
-  }
+  // Provided as string → normalize to plural form
+  let name = model.endsWith("s") ? model : `${model}s`;
 
-  // Case 3: Provided as string → normalize to plural form
-  let name = String(modelOrName);
-  name = name.endsWith("s") ? name : `${name}s`;
-
-  // Step 4: Try mongoose registry
+  // Try mongoose registry
   if (mongoose.models[name]) {
     return mongoose.models[name];
   }
@@ -238,21 +269,21 @@ const resolveModel = (modelOrName) => {
     setModelsDir(getModelsDir());
   }
 
-  // Step 5: Require model file
+  // Build candidate path
   const candidatePath = path.join(process.cwd(), MODELS_DIR, name);
   const exported = require(candidatePath);
 
-  // Step 6: Check registry again (never trust direct require return)
+  // Check registry again (never trust direct import return)
   if (mongoose.models[name]) {
     return mongoose.models[name];
   }
 
-  // Step 7: Fallback: if export itself is a Model
+  // Fallback: if export itself is a Model
   if (exported?.modelName) {
     return exported;
   }
 
-  // Step 8: If still not resolved → throw
+  // If still not resolved → throw
   throw new Error(`Mongoose model "${name}" not found (expected registered as mongoose.models["${name}"] or exported by ${candidatePath})`);
 };
 
@@ -262,6 +293,20 @@ const resolveModel = (modelOrName) => {
  * - Orders object keys alphabetically
  * - Handles Date, Set, Map, Buffer, TypedArrays, BigInt, RegExp, Error, Function, Symbol
  * - Detects cycles
+ * Always returns { status, data }:
+ *   - { status: true, data: <string> }
+ *   - { status: false, data: <Error> }
+ * @param {Any} value - The value to stringify
+ * History:
+ * 14-08-2025: Created
+ *******************************************************/
+/*******************************************************
+ * ##: Stable stringify with error handling
+ * Creates deterministic JSON for cache keys
+ * - Orders object keys alphabetically
+ * - Handles Date, Set, Map, Buffer, TypedArrays, BigInt, RegExp, Error, Function, Symbol
+ * - Detects cycles
+ * - Improved: Handles custom class instances by including class name and all own properties
  * Always returns { status, data }:
  *   - { status: true, data: <string> }
  *   - { status: false, data: <Error> }
@@ -283,6 +328,16 @@ const stableStringify = (value) => {
           return Array.from(val.entries()).sort(([a], [b]) => (a > b ? 1 : a < b ? -1 : 0));
         }
         if (Array.isArray(val)) return val;
+
+        // Improved handling for custom class instances: include class name and all own properties
+        if (val.constructor && val.constructor.name !== "Object") {
+          const sorted = { __type: val.constructor.name }; // Marker for class type
+          // Get all own properties (including non-enumerable)
+          for (const k of Object.getOwnPropertyNames(val).sort()) {
+            sorted[k] = val[k];
+          }
+          return sorted;
+        }
 
         // Plain object with sorted keys
         const sorted = {};
@@ -320,8 +375,12 @@ const stableStringify = (value) => {
  *******************************************************/
 const buildCacheKey = (fnName, args) => {
   try {
-    const [modelOrName, ...rest] = args || [];
-    const modelKey = normalizeModelName(modelOrName);
+    if (!Array.isArray(args) || args.length === 0 || typeof args[0] !== "string") {
+      return { status: false, data: new Error("Invalid args: first argument must be a model name (string)") };
+    }
+
+    const [model, ...rest] = args;
+    const modelKey = model;
 
     const strRes = stableStringify(rest ?? []);
     if (!strRes.status) {
@@ -431,27 +490,49 @@ const withCache = async (fnName, args, cacheOpts, runFn) => {
 
 /*******************************************************
  * ##: Run a unit of work inside a MongoDB transaction
- * @param {(session: ClientSession) => Promise<any>} work
- * @param {Object} [txOptions] - { readConcern, writeConcern, readPreference, maxCommitRetries }
+ * @param {Function|Object} workOrObj - Work function (async callback) or object with { work, txOptions }
+ * @param {Object} [txOptions={}] - Transaction options { readConcern, writeConcern, readPreference, maxCommitRetries } (if workOrObj is function or missing in object)
  * History:
  * 15-08-2025: Created
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const withTransaction = async (work, txOptions = {}) => {
+const withTransaction = async (workOrObj, txOptions = {}) => {
+  let work, resolvedTxOptions;
+
+  if (typeof workOrObj === "object" && workOrObj !== null) {
+    // If first arg is an object, extract properties with fallback to extra args
+    work = workOrObj.work;
+    resolvedTxOptions = workOrObj.txOptions ?? txOptions;
+  } else {
+    // If first arg is function (work), use provided txOptions
+    work = workOrObj;
+    resolvedTxOptions = txOptions;
+  }
+
+  // Ensure work is a function
+  if (typeof work !== "function") {
+    throw new Error("withTransaction: work must be a function");
+  }
+
+  // Apply default for txOptions if undefined
+  resolvedTxOptions = resolvedTxOptions ?? {};
+
   const session = await mongoose.startSession();
 
   // Destructure options
-  const { readConcern, writeConcern, readPreference, maxCommitRetries = 0 } = txOptions || {};
+  const { readConcern, writeConcern, readPreference, maxCommitRetries = 0 } = resolvedTxOptions;
 
   // Build transaction options
   const txnOptions = {};
-
-  // Set transaction options
   if (readConcern) txnOptions.readConcern = { level: readConcern };
   if (writeConcern) txnOptions.writeConcern = writeConcern;
   if (readPreference) txnOptions.readPreference = readPreference;
 
-  // Initialize attempt counter
+  // Initialize attempt counter and timeout safeguards
   let attempt = 0;
+  const maxAttempts = 10; // Hard cap to prevent infinite loops (implement as variable in later versions)
+  const startTime = Date.now();
+  const maxDurationMs = 30000; // Max 30 seconds for retries (implement as variable in later versions)
 
   // Define operation name
   const opName = "withTransaction";
@@ -464,6 +545,11 @@ const withTransaction = async (work, txOptions = {}) => {
     const start = _nowNs();
 
     while (true) {
+      // Safeguard: Prevent infinite loops
+      if (attempt >= maxAttempts || Date.now() - startTime > maxDurationMs) {
+        throw new Error(`Transaction retry limit exceeded: max attempts (${maxAttempts}) or duration (${maxDurationMs}ms) reached`);
+      }
+
       try {
         // Start the transaction
         await session.withTransaction(async () => {
@@ -565,28 +651,60 @@ const invalidateCache = (input) => {
 
 /*******************************************************
  * ##: Create a new document in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} payload - payload Object
- * @param {Object} writeArg - Write options (e.g., session)
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, payload, writeArg }
+ * @param {Object} [payload] - Payload object (if modelOrObj is string)
+ * @param {Object} [writeArg] - Write options (e.g., session) (if modelOrObj is string)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object
  *******************************************************/
-const createOne = async (modelOrName, payload, writeArg) => {
+const createOne = async (modelOrObj, payload, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("createOne");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedPayload, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedPayload = modelOrObj.payload ?? payload;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided payload and writeArg
+      model = modelOrObj;
+      resolvedPayload = payload;
+      resolvedWriteArg = writeArg;
+    }
+
+    // Early validation for edge cases (return fail with custom message)
+    if (modelOrObj === null || modelOrObj === undefined) {
+      return fail(new Error("First argument must be a model name (string) or options object"), "createOne/validation");
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "createOne/validation");
+    }
+    if (!resolvedPayload || typeof resolvedPayload !== "object") {
+      return fail(new Error("Payload is required and must be an object"), "createOne/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `createOne:${normalizeModelName(Model)}`;
+    const opName = `createOne:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Create the document
-    const doc = await Model.create(payload, options);
+    const doc = await Model.create(resolvedPayload, options);
 
     // Optional cache invalidation (by key and/or prefix)
     if (invalidateKeys || invalidatePrefixes) {
@@ -607,32 +725,64 @@ const createOne = async (modelOrName, payload, writeArg) => {
 
 /*******************************************************
  * ##: Create many documents (bulk insert)
- * @param {Object|String} modelOrName - Model instance or exact model name
- * @param {Array<Object>|Object} docs - Array of documents to insert (accepts a single object and coerces to array)
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, docs, writeArg }
+ * @param {Array<Object>|Object} [docs] - Array of documents to insert (or single object, coerced to array; if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
- * 19-08-2025: Remove fallback from options
+ * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props; added explicit coercion of single doc to array
  *******************************************************/
-const createMany = async (modelOrName, docs, writeArg) => {
+const createMany = async (modelOrObj, docs, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("createMany");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedDocs, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedDocs = modelOrObj.docs ?? docs;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided docs and writeArg
+      model = modelOrObj;
+      resolvedDocs = docs;
+      resolvedWriteArg = writeArg;
+    }
+
+    // Early validation for edge cases (return fail with custom message)
+    if (modelOrObj === null || modelOrObj === undefined) {
+      return fail(new Error("First argument must be a model name (string) or options object"), "createMany/validation");
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "createMany/validation");
+    }
+    if (!resolvedDocs) {
+      return fail(new Error("Docs are required (array or single object)"), "createMany/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `createMany:${normalizeModelName(Model)}`;
+    const opName = `createMany:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
+
+    // Coerce single document to array if necessary (as per function doc)
+    const docsToInsert = Array.isArray(resolvedDocs) ? resolvedDocs : [resolvedDocs];
 
     // Insert the documents
-    const { ordered = true, ...rest } = options;
-    const res = await Model.insertMany(docs, { ordered, ...rest });
+    const { ordered = true, ...rest } = options || {};
+    const res = await Model.insertMany(docsToInsert, { ordered, ...rest });
 
     // Optional cache invalidation (by key and/or prefix)
     if (invalidateKeys || invalidatePrefixes) {
@@ -650,36 +800,66 @@ const createMany = async (modelOrName, docs, writeArg) => {
     return fail(err, "createMany");
   }
 };
-
 /*******************************************************
  * ##: Get a single document from a model (with populate - optional)
  * Resolve a model and retrieve a single document, with optional
  * field selection, population of references, and caching.
  *
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Array|String} select - Fields to select
- * @param {Object} cacheOpts - Cache options
- * @param {Array|Object|String} populate - Populate definition(s)
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, populate, cacheOpts }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Array|String} [select] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  *
  * History:
  * 14-08-2025: Created
  * 21-08-2025: Added populate support
  * 22-08-2025: Change parameter order
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const getOne = async (modelOrName, filter, select, populate, cacheOpts) => {
+const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("getOne");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedSelect, resolvedPopulate, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedSelect = modelOrObj.select ?? select;
+      resolvedPopulate = modelOrObj.populate ?? populate;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedSelect = select;
+      resolvedPopulate = populate;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "getOne/validation");
+    }
+    if (!resolvedFilter || typeof resolvedFilter !== "object") {
+      return fail(new Error("Filter is required and must be an object"), "getOne/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and record start time
-    const opName = `getOne:${normalizeModelName(Model)}`;
+    const opName = `getOne:${model}`;
     const start = _nowNs();
 
     // Query executor (with populate support)
     const runQuery = async () => {
-      let query = Model.findOne(filter, select);
-      if (populate) query = query.populate(populate);
+      let query = Model.findOne(resolvedFilter, resolvedSelect);
+      if (resolvedPopulate) query = query.populate(resolvedPopulate);
       const doc = await query.lean();
 
       // Record database operation metrics
@@ -690,8 +870,8 @@ const getOne = async (modelOrName, filter, select, populate, cacheOpts) => {
     };
 
     // If caching is enabled, wrap query with cache logic
-    if (cacheOpts?.enabled) {
-      return await withCache("getOne", [modelOrName, filter, select, populate], cacheOpts, runQuery);
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache("getOne", [model, resolvedFilter, resolvedSelect, resolvedPopulate], resolvedCacheOpts, runQuery);
     }
 
     // Execute query without cache
@@ -705,30 +885,60 @@ const getOne = async (modelOrName, filter, select, populate, cacheOpts) => {
 
 /*******************************************************
  * ##: Get many documents from a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Array} select - Fields to select
- * @param {Object} sort - Sort Object
- * @param {Array|Object|String} populate - Populate definition(s) (currently not used)
- * @param {Object} cacheOpts - Cache options
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, sort, populate, cacheOpts }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Array} [select=[]] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Object} [sort={}] - Sort object (if modelOrObj is string or missing in object)
+ * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 20-08-2025: Updated (remove default sort)
  * 22-08-2025: Added populate support
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const getMany = async (modelOrName, filter, select = [], sort = {}, populate, cacheOpts) => {
+const getMany = async (modelOrObj, filter, select = [], sort = {}, populate, cacheOpts) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("getMany");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedSelect = modelOrObj.select ?? select;
+      resolvedSort = modelOrObj.sort ?? sort;
+      resolvedPopulate = modelOrObj.populate ?? populate;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedSelect = select;
+      resolvedSort = sort;
+      resolvedPopulate = populate;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "getMany/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `getMany:${normalizeModelName(Model)}`;
+    const opName = `getMany:${model}`;
     const start = _nowNs();
 
     // Query executor (with populate support)
     const runQuery = async () => {
-      let query = Model.find(filter, select).sort(sort);
-      if (populate) query = query.populate(populate);
+      let query = Model.find(resolvedFilter, resolvedSelect).sort(resolvedSort);
+      if (resolvedPopulate) query = query.populate(resolvedPopulate);
       const docs = await query.lean();
 
       // Record database operation metrics
@@ -739,8 +949,8 @@ const getMany = async (modelOrName, filter, select = [], sort = {}, populate, ca
     };
 
     // Use cache only if cacheOpts is defined/active
-    if (cacheOpts?.enabled) {
-      return await withCache("getMany", [modelOrName, filter, select, sort, populate], cacheOpts, runQuery);
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache("getMany", [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate], resolvedCacheOpts, runQuery);
     }
 
     // Find the documents without cache
@@ -755,26 +965,53 @@ const getMany = async (modelOrName, filter, select = [], sort = {}, populate, ca
 /*******************************************************
  * ##: Aggregate documents in a model
  * Executes a MongoDB aggregation pipeline.
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Array<Object>} pipeline - Aggregation pipeline stages
- * @param {Object} cacheOpts - Cache options
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, pipeline, cacheOpts }
+ * @param {Array<Object>} [pipeline] - Aggregation pipeline stages (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  * History:
  * 21-08-2025: Created
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const aggregate = async (modelOrName, pipeline, cacheOpts) => {
+const aggregate = async (modelOrObj, pipeline, cacheOpts) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("aggregate");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedPipeline, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedPipeline = modelOrObj.pipeline ?? pipeline;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedPipeline = pipeline;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "aggregate/validation");
+    }
+    if (!resolvedPipeline || !Array.isArray(resolvedPipeline)) {
+      return fail(new Error("Pipeline is required and must be an array of stages"), "aggregate/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `aggregate:${normalizeModelName(Model)}`;
+    const opName = `aggregate:${model}`;
     const start = _nowNs();
 
     // Use cache only if cacheOpts is defined/active
-    if (cacheOpts?.enabled) {
-      return await withCache("aggregate", [modelOrName, pipeline], cacheOpts, async () => {
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache("aggregate", [model, resolvedPipeline], resolvedCacheOpts, async () => {
         // Execute the aggregation
-        const result = await Model.aggregate(pipeline).exec();
+        const result = await Model.aggregate(resolvedPipeline).exec();
 
         // Record database operation metrics
         _recordDb(opName, start);
@@ -785,7 +1022,7 @@ const aggregate = async (modelOrName, pipeline, cacheOpts) => {
     }
 
     // Execute the aggregation without cache
-    const result = await Model.aggregate(pipeline).exec();
+    const result = await Model.aggregate(resolvedPipeline).exec();
 
     // Record database operation metrics
     _recordDb(opName, start);
@@ -798,34 +1035,64 @@ const aggregate = async (modelOrName, pipeline, cacheOpts) => {
     return fail(err, "aggregate");
   }
 };
+
 /*******************************************************
  * ##: Update a single document in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Object} data - Update data
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, data, writeArg }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Object} [data] - Update data (if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const updateOne = async (modelOrName, filter, data, writeArg) => {
+const updateOne = async (modelOrObj, filter, data, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("updateOne");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedData, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedData = modelOrObj.data ?? data;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedData = data;
+      resolvedWriteArg = writeArg;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "updateOne/validation");
+    }
+    if (!resolvedFilter || typeof resolvedFilter !== "object") {
+      return fail(new Error("Filter is required and must be an object"), "updateOne/validation");
+    }
+    if (!resolvedData || typeof resolvedData !== "object") {
+      return fail(new Error("Data is required and must be an object"), "updateOne/validation");
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `updateOne:${normalizeModelName(Model)}`;
+    const opName = `updateOne:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Execute update with optional Mongoose options (e.g., session, runValidators)
-    const res = await Model.updateOne(filter, data, options);
+    const res = await Model.updateOne(resolvedFilter, resolvedData, options);
 
     // Invalidate cache by exact keys and/or prefixes (if provided)
     if (invalidateKeys || invalidatePrefixes) {
@@ -846,32 +1113,50 @@ const updateOne = async (modelOrName, filter, data, writeArg) => {
 
 /*******************************************************
  * ##: Update many documents in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Object} data - Update data
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, data, writeArg }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Object} [data] - Update data (if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const updateMany = async (modelOrName, filter, data, writeArg) => {
+const updateMany = async (modelOrObj, filter, data, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("updateMany");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedData, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedData = modelOrObj.data ?? data;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedData = data;
+      resolvedWriteArg = writeArg;
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `updateMany:${normalizeModelName(Model)}`;
+    const opName = `updateMany:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Update the documents
-    const res = await Model.updateMany(filter, data, options);
+    const res = await Model.updateMany(resolvedFilter, resolvedData, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -892,31 +1177,47 @@ const updateMany = async (modelOrName, filter, data, writeArg) => {
 
 /*******************************************************
  * ##: Delete a single document in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, writeArg }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const deleteOne = async (modelOrName, filter, writeArg) => {
+const deleteOne = async (modelOrObj, filter, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("deleteOne");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedWriteArg = writeArg;
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `deleteOne:${normalizeModelName(Model)}`;
+    const opName = `deleteOne:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Delete the document
-    const res = await Model.deleteOne(filter, options);
+    const res = await Model.deleteOne(resolvedFilter, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -937,31 +1238,47 @@ const deleteOne = async (modelOrName, filter, writeArg) => {
 
 /*******************************************************
  * ##: Delete many documents in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, writeArg }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const deleteMany = async (modelOrName, filter, writeArg) => {
+const deleteMany = async (modelOrObj, filter, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("deleteMany");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedWriteArg = writeArg;
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `deleteMany:${normalizeModelName(Model)}`;
+    const opName = `deleteMany:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Delete the documents
-    const res = await Model.deleteMany(filter, options);
+    const res = await Model.deleteMany(resolvedFilter, options);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -982,35 +1299,53 @@ const deleteMany = async (modelOrName, filter, writeArg) => {
 
 /*******************************************************
  * ##: Upsert a single document in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Object} data - Upsert data
- * @param {String|String[]|Object} writeArg - Flexible extra arg:
- *    - string | string[]                      -> invalidateKeys (legacy)
- *    - { session, runValidators, ... }        -> options (direct)
- *    - { options:{...}, invalidateKeys, invalidatePrefixes } -> combined
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, data, writeArg }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Object} [data] - Upsert data (if modelOrObj is string or missing in object)
+ * @param {String|String[]|Object} [writeArg] - Flexible extra arg (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const upsertOne = async (modelOrName, filter, data, writeArg) => {
+const upsertOne = async (modelOrObj, filter, data, writeArg) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("upsertOne");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedData, resolvedWriteArg;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedData = modelOrObj.data ?? data;
+      resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedData = data;
+      resolvedWriteArg = writeArg;
+    }
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `upsertOne:${normalizeModelName(Model)}`;
+    const opName = `upsertOne:${model}`;
     const start = _nowNs();
 
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
-    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(writeArg);
+    const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Merge user-provided options with upsert:true (user options cannot disable upsert)
     const opts = { upsert: true, ...options };
 
     // Upsert the document
-    const res = await Model.updateOne(filter, data, opts);
+    const res = await Model.updateOne(resolvedFilter, resolvedData, opts);
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
@@ -1031,52 +1366,91 @@ const upsertOne = async (modelOrName, filter, data, writeArg) => {
 
 /*******************************************************
  * ##: Get many documents in a model with pagination
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Array} select - Fields to select
- * @param {Object} sort - Sort Object
- * @param {Number} page - Page number
- * @param {Number} limit - Number of documents per page
- * @param {Array|Object|String} populate - Populate definition(s) (currently not used)
- * @param {Object} cacheOpts - Cache options
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, sort, page, limit, populate, cacheOpts }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Array} [select=[]] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Object} [sort={}] - Sort object (if modelOrObj is string or missing in object)
+ * @param {Number} [page=1] - Page number (if modelOrObj is string or missing in object)
+ * @param {Number} [limit=100] - Number of documents per page (if modelOrObj is string or missing in object)
+ * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
  * 20-08-2025: Updated (remove default sort)
  * 22-08-2025: Added support for populate
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props and defaults
  *******************************************************/
-const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}, page = 1, limit = 100, populate, cacheOpts) => {
+const getManyWithPagination = async (modelOrObj, filter, select = [], sort = {}, page = 1, limit = 100, populate, cacheOpts) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("getManyWithPagination");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPage, resolvedLimit, resolvedPopulate, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedSelect = modelOrObj.select ?? select;
+      resolvedSort = modelOrObj.sort ?? sort;
+      resolvedPage = modelOrObj.page ?? page;
+      resolvedLimit = modelOrObj.limit ?? limit;
+      resolvedPopulate = modelOrObj.populate ?? populate;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedSelect = select;
+      resolvedSort = sort;
+      resolvedPage = page;
+      resolvedLimit = limit;
+      resolvedPopulate = populate;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Apply defaults for optional parameters (in case they are undefined)
+    resolvedSelect = resolvedSelect ?? [];
+    resolvedSort = resolvedSort ?? {};
+    resolvedPage = resolvedPage ?? 1;
+    resolvedLimit = resolvedLimit ?? 100;
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `getManyWithPagination:${normalizeModelName(Model)}`;
+    const opName = `getManyWithPagination:${model}`;
     const start = _nowNs();
 
-    // Adiciona suporte ao parâmetro populate
+    // Query executor (with populate support)
     const runQuery = async () => {
-      const total = await Model.countDocuments(filter);
-      let query = Model.find(filter, select)
-        .sort(sort)
-        .skip((page - 1) * limit)
-        .limit(limit);
-      if (populate) query = query.populate(populate);
+      const total = await Model.countDocuments(resolvedFilter);
+      let query = Model.find(resolvedFilter, resolvedSelect)
+        .sort(resolvedSort)
+        .skip((resolvedPage - 1) * resolvedLimit)
+        .limit(resolvedLimit);
+      if (resolvedPopulate) query = query.populate(resolvedPopulate);
       const docs = await query.lean();
 
       // Record database operation metrics
       _recordDb(opName, start);
 
       // Return the found documents
-      return ok({ data: docs, total, page, limit });
+      return ok({ data: docs, total, page: resolvedPage, limit: resolvedLimit });
     };
 
     // Use cache only if cacheOpts is defined/active
-    if (cacheOpts?.enabled) {
-      // Adiciona populate ao cache key e executor
-      return await withCache("getManyWithPagination", [modelOrName, filter, select, sort, page, limit, populate], cacheOpts, () => runQuery);
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache(
+        "getManyWithPagination",
+        [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPage, resolvedLimit, resolvedPopulate],
+        resolvedCacheOpts,
+        runQuery
+      );
     }
 
-    // Executa sem cache, permite passar populate como último argumento
+    // Execute without cache
     return await runQuery();
 
     // Error handling
@@ -1087,26 +1461,48 @@ const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}
 
 /*******************************************************
  * ##: Count documents in a model
- * @param {Object|String} modelOrName - Model instance or name
- * @param {Object} filter - Filter Object
- * @param {Object} cacheOpts - Cache options
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, cacheOpts }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  * History:
  * 14-08-2025: Created
+ * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  *******************************************************/
-const countDocuments = async (modelOrName, filter, cacheOpts) => {
+const countDocuments = async (modelOrObj, filter, cacheOpts) => {
   try {
+    // Check connection early
+    const connCheck = _checkConnection("countDocuments");
+    if (!connCheck.status) return connCheck;
+
+    let model, resolvedFilter, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Apply default for filter if undefined (empty filter counts all documents)
+    resolvedFilter = resolvedFilter ?? {};
+
     // Resolve the model (cached)
-    const Model = resolveModel(modelOrName);
+    const Model = await resolveModel(model);
 
     // Build operation name and start time
-    const opName = `countDocuments:${normalizeModelName(Model)}`;
+    const opName = `countDocuments:${model}`;
     const start = _nowNs();
 
     // Use cache only if cacheOpts is defined/active
-    if (cacheOpts?.enabled) {
-      return await withCache("countDocuments", [modelOrName, filter], cacheOpts, async () => {
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache("countDocuments", [model, resolvedFilter], resolvedCacheOpts, async () => {
         // Find the documents (count)
-        const count = await Model.countDocuments(filter);
+        const count = await Model.countDocuments(resolvedFilter);
 
         // Record database operation metrics
         _recordDb(opName, start);
@@ -1117,7 +1513,7 @@ const countDocuments = async (modelOrName, filter, cacheOpts) => {
     }
 
     // Find the documents (count) without cache
-    const count = await Model.countDocuments(filter);
+    const count = await Model.countDocuments(resolvedFilter);
 
     // Record database operation metrics
     _recordDb(opName, start);
