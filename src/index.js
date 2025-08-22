@@ -665,8 +665,9 @@ const createMany = async (modelOrName, docs, writeArg) => {
  * History:
  * 14-08-2025: Created
  * 21-08-2025: Added populate support
+ * 22-08-2025: Change parameter order
  *******************************************************/
-const getOne = async (modelOrName, filter, select, cacheOpts, populate) => {
+const getOne = async (modelOrName, filter, select, populate, cacheOpts) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);
@@ -708,12 +709,14 @@ const getOne = async (modelOrName, filter, select, cacheOpts, populate) => {
  * @param {Object} filter - Filter Object
  * @param {Array} select - Fields to select
  * @param {Object} sort - Sort Object
+ * @param {Array|Object|String} populate - Populate definition(s) (currently not used)
  * @param {Object} cacheOpts - Cache options
  * History:
  * 14-08-2025: Created
  * 20-08-2025: Updated (remove default sort)
+ * 22-08-2025: Added populate support
  *******************************************************/
-const getMany = async (modelOrName, filter, select = [], sort = {}, cacheOpts) => {
+const getMany = async (modelOrName, filter, select = [], sort = {}, populate, cacheOpts) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);
@@ -722,28 +725,26 @@ const getMany = async (modelOrName, filter, select = [], sort = {}, cacheOpts) =
     const opName = `getMany:${normalizeModelName(Model)}`;
     const start = _nowNs();
 
+    // Query executor (with populate support)
+    const runQuery = async () => {
+      let query = Model.find(filter, select).sort(sort);
+      if (populate) query = query.populate(populate);
+      const docs = await query.lean();
+
+      // Record database operation metrics
+      _recordDb(opName, start);
+
+      // Return the found documents
+      return ok(docs);
+    };
+
     // Use cache only if cacheOpts is defined/active
     if (cacheOpts?.enabled) {
-      return await withCache("getMany", [modelOrName, filter, select, sort], cacheOpts, async () => {
-        // Find the documents
-        const docs = await Model.find(filter, select).sort(sort).lean();
-
-        // Record database operation metrics
-        _recordDb(opName, start);
-
-        // Return the found documents
-        return ok(docs);
-      });
+      return await withCache("getMany", [modelOrName, filter, select, sort, populate], cacheOpts, runQuery);
     }
 
     // Find the documents without cache
-    const docs = await Model.find(filter, select).sort(sort).lean();
-
-    // Record database operation metrics
-    _recordDb(opName, start);
-
-    // Return the found documents
-    return ok(docs);
+    return await runQuery();
 
     // Error handling
   } catch (err) {
@@ -1036,12 +1037,14 @@ const upsertOne = async (modelOrName, filter, data, writeArg) => {
  * @param {Object} sort - Sort Object
  * @param {Number} page - Page number
  * @param {Number} limit - Number of documents per page
+ * @param {Array|Object|String} populate - Populate definition(s) (currently not used)
  * @param {Object} cacheOpts - Cache options
  * History:
  * 14-08-2025: Created
  * 20-08-2025: Updated (remove default sort)
+ * 22-08-2025: Added support for populate
  *******************************************************/
-const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}, page = 1, limit = 100, cacheOpts) => {
+const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}, page = 1, limit = 100, populate, cacheOpts) => {
   try {
     // Resolve the model (cached)
     const Model = resolveModel(modelOrName);
@@ -1050,43 +1053,31 @@ const getManyWithPagination = async (modelOrName, filter, select = [], sort = {}
     const opName = `getManyWithPagination:${normalizeModelName(Model)}`;
     const start = _nowNs();
 
+    // Adiciona suporte ao parâmetro populate
+    const runQuery = async () => {
+      const total = await Model.countDocuments(filter);
+      let query = Model.find(filter, select)
+        .sort(sort)
+        .skip((page - 1) * limit)
+        .limit(limit);
+      if (populate) query = query.populate(populate);
+      const docs = await query.lean();
+
+      // Record database operation metrics
+      _recordDb(opName, start);
+
+      // Return the found documents
+      return ok({ data: docs, total, page, limit });
+    };
+
     // Use cache only if cacheOpts is defined/active
     if (cacheOpts?.enabled) {
-      return await withCache("getManyWithPagination", [modelOrName, filter, select, sort, page, limit], cacheOpts, async () => {
-        // Find the documents (count)
-        const total = await Model.countDocuments(filter);
-
-        // Find the documents
-        const docs = await Model.find(filter, select)
-          .sort(sort)
-          .skip((page - 1) * limit)
-          .limit(limit)
-          .lean();
-
-        // Record database operation metrics
-        _recordDb(opName, start);
-
-        // Return the found documents
-        return ok({ data: docs, total, page, limit });
-      });
+      // Adiciona populate ao cache key e executor
+      return await withCache("getManyWithPagination", [modelOrName, filter, select, sort, page, limit, populate], cacheOpts, () => runQuery);
     }
 
-    // Count and Find the documents without cache
-    // Find the documents (count)
-    const total = await Model.countDocuments(filter);
-
-    // Find the documents
-    const docs = await Model.find(filter, select)
-      .sort(sort)
-      .skip((page - 1) * limit)
-      .limit(limit)
-      .lean();
-
-    // Record database operation metrics
-    _recordDb(opName, start);
-
-    // Return the found documents
-    return ok({ data: docs, total, page, limit });
+    // Executa sem cache, permite passar populate como último argumento
+    return await runQuery();
 
     // Error handling
   } catch (err) {

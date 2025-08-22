@@ -107,7 +107,8 @@ Priority:
 
 1. Value provided via `setModelsDir(dir)`
 2. Environment variable `SP_MONGO_REPO_MODELS_DIR`
-3. Otherwise an error is thrown on first model resolution
+3. Default models directory (`./models`) if none defined
+4. Otherwise an error is thrown on first model resolution
 
 ```js
 db.setModelsDir(path.join(__dirname, "models"));
@@ -216,10 +217,10 @@ await db.updateMany(
 
 ### Read
 
-- `getOne(modelOrName, filter, select?, cacheOpts?)`
-- `getMany(modelOrName, filter, select?, sort?, cacheOpts?)`
+- `getOne(modelOrName, filter, select?, populate?, cacheOpts?)`
+- `getMany(modelOrName, filter, select?, sort?, populate?, cacheOpts?)`
 - `aggregate(modelOrName, pipeline, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
-- `getManyWithPagination(modelOrName, filter, select?, sort?, page?, limit?, cacheOpts?)`
+- `getManyWithPagination(modelOrName, filter, select?, sort?, page?, limit?, populate?, cacheOpts?)`
 - `countDocuments(modelOrName, filter, cacheOpts?)`
 
 ---
@@ -227,17 +228,71 @@ await db.updateMany(
 **Examples**
 
 ```js
-await db.getOne("users", { email: "a@b.com" }, null, { enabled: true, ttl: "1h" });
+// getOne with populate
+await db.getOne(
+  "orders", // collection
+  { _id: "123" }, // filter
+  null, // projection
+  { path: "customer", select: "name email" }, // populate
+  { enabled: true, ttl: "1h" } // cache
+);
 
-await db.getMany("orders", { status: "paid" }, ["_id", "total"], { createdAt: -1 }, { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 });
+// getMany with single populate
+await db.getMany(
+  "orders", // collection
+  { status: "paid" }, // filter
+  ["_id", "total"], // projection
+  { createdAt: -1 }, // sort
+  { path: "customer", select: "name email" }, // populate
+  { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 } // cache
+);
 
+// getMany with multiple populates
+await db.getMany(
+  "orders", // collection
+  { status: "paid" }, // filter
+  ["_id", "total"], // projection
+  { createdAt: -1 }, // sort
+  // populate (multiple)
+  [
+    { path: "products", select: ["field1", "field2"] },
+    { path: "customer", select: "name email" },
+  ],
+  { enabled: true } // cache
+);
+
+// aggregate
 await db.aggregate("orders", [{ $match: { status: "paid" } }, { $group: { _id: "$userId", total: { $sum: "$amount" } } }], { enabled: true, ttl: "5m" });
 
-const paged = await db.getManyWithPagination("products", { active: true }, ["_id", "title"], { createdAt: -1 }, 2, 20, {
-  enabled: true,
-  key: "products:active:p2:l20",
-});
+// getManyWithPagination with populate
+const paged = await db.getManyWithPagination(
+  "products", // collection
+  { active: true }, // filter
+  ["_id", "title"], // projection
+  { createdAt: -1 }, // sort
+  2, // page
+  20, // limit
+  { path: "category", select: "name" }, // populate
+  { enabled: true, key: "products:active:p2:l20" } // cache
+);
 
+// getManyWithPagination with multiple populates
+const pagedMulti = await db.getManyWithPagination(
+  "orders", // collection
+  { status: "active" }, // filter
+  ["_id", "total"], // projection
+  { createdAt: -1 }, // sort
+  1, // page
+  10, // limit
+  // populate
+  [
+    { path: "products", select: ["field1", "field2"] },
+    { path: "customer", select: "name email" },
+  ],
+  { enabled: true } // cache
+);
+
+// countDocuments
 await db.countDocuments("orders", { status: "processing" }, { enabled: true, ttl: "5m" });
 ```
 
@@ -401,5 +456,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 5_  
-_Last update: 21-08-2025_
+_Document version: 6_  
+_Last update: 22-08-2025_
