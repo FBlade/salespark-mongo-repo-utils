@@ -118,13 +118,14 @@ Priority:
 
 1. Value provided via `setModelsDir(dir)`
 2. Environment variable `SP_MONGO_REPO_MODELS_DIR`
-3. Default models directory (`./models`) if none defined
-4. Otherwise an error is thrown on first model resolution
+3. If neither is set, defaults to the `./models` directory
+4. An error is only thrown if the default directory does not exist or the requested model cannot be found
 
 ```js
 db.setModelsDir(path.join(__dirname, "models"));
 // or via environment variable (.env):
 // SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
+// Or folder ./models if nothing is set
 ```
 
 **Resolution rules:**
@@ -533,6 +534,21 @@ TTL accepts:
 - Model name strings are auto-pluralized if they do not end with `s` (e.g. `"user"` → `"users"`).
 - When requiring by name, files are loaded from `SP_MONGO_REPO_MODELS_DIR` (or the value set with `setModelsDir`).
 - Cache is **opt-in**: reads only use it if `cacheOpts` is provided; writes can request invalidation via `writeArg`.
+
+---
+
+## 🛠️ Support
+
+Got stuck? Don’t panic — we’ve got you covered.
+
+### 🤖 AI Assistant
+
+We built a custom **AI Assistant** trained _only_ on `@salespark/mongo-repo-utils`.  
+It answers implementation and troubleshooting questions in real time:
+
+👉 [Ask the Mongo Repo Utils GPT](https://chatgpt.com/g/g-68a8d1ef5b60819198a18587a80f99be-salespark-mongo-repository-utilities-v1)
+
+_(Free to use with a ChatGPT account)_
 
 ---
 
