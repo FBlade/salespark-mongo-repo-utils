@@ -574,5 +574,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 6_  
-_Last update: 22-08-2025_
+_Document version: 7_  
+_Last update: 23-08-2025_
