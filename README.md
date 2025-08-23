@@ -537,21 +537,6 @@ TTL accepts:
 
 ---
 
-## 🛠️ Support
-
-Got stuck? Don’t panic — we’ve got you covered.
-
-### 🤖 AI Assistant
-
-We built a custom **AI Assistant** trained _only_ on `@salespark/mongo-repo-utils`.  
-It answers implementation and troubleshooting questions in real time:
-
-👉 [Ask the Mongo Repo Utils GPT](https://chatgpt.com/g/g-68a8d1ef5b60819198a18587a80f99be-salespark-mongo-repository-utilities-v1)
-
-_(Free to use with a ChatGPT account)_
-
----
-
 ### 🔒 Internal Usage Notice
 
 This package is primarily designed and maintained for internal use within the SalesPark ecosystem.
