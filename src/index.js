@@ -232,11 +232,21 @@ const _parseWriteArg = (arg) => {
  ****************************************************/
 function getAppRoot() {
   try {
-    // app entrypoint
-    return path.dirname(require.main.filename);
+    // Prefer current working directory
+    let _root = process.cwd();
+
+    // If cwd is the disk root, fallback to main module directory (if available)
+    if (path.parse(_root).root === _root && require.main) {
+      return path.dirname(require.main.filename);
+    }
+
+    // Normal case: return cwd
+    return _root;
+
+    // Error handling
   } catch (error) {
-    // Return folder below me and node_modules
-    return path.join(__dirname, "../..");
+    // Fallback: return two levels above this file (common for node_modules usage)
+    return path.resolve(__dirname, "../..");
   }
 }
 
