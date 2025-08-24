@@ -225,6 +225,22 @@ const _parseWriteArg = (arg) => {
 };
 
 /****************************************************
+ * ##: Get the application root directory
+ * @returns {String} - The absolute path to the application root
+ * History:
+ * 24-08-2025: Created
+ ****************************************************/
+function getAppRoot() {
+  try {
+    // app entrypoint
+    return path.dirname(require.main.filename);
+  } catch (error) {
+    // Return folder below me and node_modules
+    return path.join(__dirname, "../..");
+  }
+}
+
+/****************************************************
  * ##: Resolve a Mongoose Model
  * Resolve a Mongoose Model from an exact model name (string).
  *
@@ -270,7 +286,7 @@ const resolveModel = (model) => {
   }
 
   // Build candidate path
-  const candidatePath = path.join(process.cwd(), MODELS_DIR, name);
+  const candidatePath = path.join(getAppRoot(), MODELS_DIR, name);
   const exported = require(candidatePath);
 
   // Check registry again (never trust direct import return)
@@ -659,6 +675,7 @@ const invalidateCache = (input) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object
+ * 23-08-2025: Ensured created document is returned as plain object
  *******************************************************/
 const createOne = async (modelOrObj, payload, writeArg) => {
   try {
@@ -715,7 +732,7 @@ const createOne = async (modelOrObj, payload, writeArg) => {
     _recordDb(opName, start);
 
     // Return the created document
-    return ok(doc);
+    return ok(doc.toObject());
 
     // Error handling
   } catch (err) {
@@ -733,6 +750,7 @@ const createOne = async (modelOrObj, payload, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props; added explicit coercion of single doc to array
+ * 23-08-2025: Ensured created documents are returned as plain array of objects
  *******************************************************/
 const createMany = async (modelOrObj, docs, writeArg) => {
   try {
@@ -792,8 +810,8 @@ const createMany = async (modelOrObj, docs, writeArg) => {
     // Record database operation metrics
     _recordDb(opName, start);
 
-    // Return the result
-    return ok(res);
+    // Return array of plain objects
+    return ok(res.map((doc) => doc.toObject()));
 
     // Error handling
   } catch (err) {

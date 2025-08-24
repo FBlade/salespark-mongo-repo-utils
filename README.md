@@ -546,7 +546,7 @@ Got stuck? Don’t panic — we’ve got you covered.
 We built a custom **AI Assistant** trained _only_ on `@salespark/mongo-repo-utils`.  
 It answers implementation and troubleshooting questions in real time:
 
-👉 Ask the Mongo Repo Utils GPT:
+👉 Ask the Mongo Repo Utils GPT:  
 https://chatgpt.com/g/g-68a8d1ef5b60819198a18587a80f99be-salespark-mongo-repository-utilities-v1
 
 _(Free to use with a ChatGPT account)_
