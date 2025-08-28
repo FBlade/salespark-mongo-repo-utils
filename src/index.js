@@ -160,15 +160,6 @@ const resetMetrics = () => {
 const ok = (data) => ({ status: true, data });
 const fail = (err, ctx) => (logger(err, ctx), { status: false, data: err });
 
-// Helper function to check Mongoose connection state
-const _checkConnection = (ctx) => {
-  if (mongoose.connection.readyState !== 1) {
-    // 1 = connected
-    return fail(new Error("Mongoose is not connected. Ensure mongoose.connect() is called before operations."), `${ctx}/connection`);
-  }
-  return { status: true }; // Success (proceed)
-};
-
 /*******************************************************
  * ##: Hash a string
  * A simple and fast hash function (djb2 xor)
@@ -686,13 +677,10 @@ const invalidateCache = (input) => {
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object
  * 23-08-2025: Ensured created document is returned as plain object
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const createOne = async (modelOrObj, payload, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("createOne");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedPayload, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -761,13 +749,10 @@ const createOne = async (modelOrObj, payload, writeArg) => {
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props; added explicit coercion of single doc to array
  * 23-08-2025: Ensured created documents are returned as plain array of objects
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const createMany = async (modelOrObj, docs, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("createMany");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedDocs, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -844,13 +829,10 @@ const createMany = async (modelOrObj, docs, writeArg) => {
  * 21-08-2025: Added populate support
  * 22-08-2025: Change parameter order
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("getOne");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedSelect, resolvedPopulate, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -924,13 +906,10 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
  * 20-08-2025: Updated (remove default sort)
  * 22-08-2025: Added populate support
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const getMany = async (modelOrObj, filter, select = [], sort = {}, populate, cacheOpts) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("getMany");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -999,13 +978,10 @@ const getMany = async (modelOrObj, filter, select = [], sort = {}, populate, cac
  * History:
  * 21-08-2025: Created
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const aggregate = async (modelOrObj, pipeline, cacheOpts) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("aggregate");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedPipeline, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1075,13 +1051,10 @@ const aggregate = async (modelOrObj, pipeline, cacheOpts) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const updateOne = async (modelOrObj, filter, data, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("updateOne");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedData, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1150,13 +1123,10 @@ const updateOne = async (modelOrObj, filter, data, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const updateMany = async (modelOrObj, filter, data, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("updateMany");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedData, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1213,13 +1183,10 @@ const updateMany = async (modelOrObj, filter, data, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const deleteOne = async (modelOrObj, filter, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("deleteOne");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1274,13 +1241,10 @@ const deleteOne = async (modelOrObj, filter, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const deleteMany = async (modelOrObj, filter, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("deleteMany");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1336,13 +1300,10 @@ const deleteMany = async (modelOrObj, filter, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const upsertOne = async (modelOrObj, filter, data, writeArg) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("upsertOne");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedData, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1407,13 +1368,10 @@ const upsertOne = async (modelOrObj, filter, data, writeArg) => {
  * 20-08-2025: Updated (remove default sort)
  * 22-08-2025: Added support for populate
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props and defaults
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const getManyWithPagination = async (modelOrObj, filter, select = [], sort = {}, page = 1, limit = 100, populate, cacheOpts) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("getManyWithPagination");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPage, resolvedLimit, resolvedPopulate, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
@@ -1495,13 +1453,10 @@ const getManyWithPagination = async (modelOrObj, filter, select = [], sort = {},
  * History:
  * 14-08-2025: Created
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
+ * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
 const countDocuments = async (modelOrObj, filter, cacheOpts) => {
   try {
-    // Check connection early
-    const connCheck = _checkConnection("countDocuments");
-    if (!connCheck.status) return connCheck;
-
     let model, resolvedFilter, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
