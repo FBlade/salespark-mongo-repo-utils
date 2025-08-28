@@ -190,12 +190,13 @@ const _parseWriteArg = (arg) => {
   let options, invalidateKeys, invalidatePrefixes;
 
   // If no argument is provided, return an object with all undefined
-  if (!arg) return { options, invalidateKeys, invalidatePrefixes };
+  if (!arg) {
+    return { options: undefined, invalidateKeys: undefined, invalidatePrefixes: undefined };
+  }
 
   // Case 1: argument is a string or an array → treat it as invalidateKeys
   if (typeof arg === "string" || Array.isArray(arg)) {
-    invalidateKeys = arg;
-    return { options, invalidateKeys, invalidatePrefixes };
+    return { options: undefined, invalidateKeys: arg, invalidatePrefixes: undefined };
   }
 
   // Case 2: argument is an object
@@ -1289,6 +1290,16 @@ const deleteMany = async (modelOrObj, filter, writeArg) => {
   }
 };
 
+/****************************************************
+ * ##: Check if a document should be returned
+ * @param {object} opts - Options object
+ * History:
+ * 28-08-2025: Created
+ ****************************************************/
+function wantsDoc(opts) {
+  return opts?.new === true || opts?.returnDocument === "after" || opts?.returnDocument === true;
+}
+
 /*******************************************************
  * ##: Upsert a single document in a model
  * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, data, writeArg }
@@ -1300,7 +1311,7 @@ const deleteMany = async (modelOrObj, filter, writeArg) => {
  * 15-08-2025: Added write options
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
- * 28-08-2025: remove _checkConnection (edge cases)
+ * 28-08-2025: remove _checkConnection (edge cases) and implement option for returning the upserted document or counts
  *******************************************************/
 const upsertOne = async (modelOrObj, filter, data, writeArg) => {
   try {
@@ -1332,9 +1343,16 @@ const upsertOne = async (modelOrObj, filter, data, writeArg) => {
 
     // Merge user-provided options with upsert:true (user options cannot disable upsert)
     const opts = { upsert: true, ...options };
+    let res;
 
     // Upsert the document
-    const res = await Model.updateOne(resolvedFilter, resolvedData, opts);
+    if (wantsDoc(opts) && typeof Model.findOneAndUpdate === "function") {
+      // Upsert and return the document
+      res = await Model.findOneAndUpdate(resolvedFilter, resolvedData, opts);
+    } else {
+      // Upsert without returning the document
+      res = await Model.updateOne(resolvedFilter, resolvedData, opts);
+    }
 
     // Invalidate cache by key/keys if provided
     if (invalidateKeys || invalidatePrefixes) {
