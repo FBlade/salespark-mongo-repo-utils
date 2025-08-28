@@ -379,7 +379,16 @@ await db.countDocuments({ model: "orders", filter: { status: "processing" }, cac
 - `updateMany(modelOrObj, filter?, data?, writeArg?)`
 - `deleteOne(modelOrObj, filter?, writeArg?)`
 - `deleteMany(modelOrObj, filter?, writeArg?)`
-- `upsertOne(modelOrObj, filter?, data?, writeArg?)` (always enforces `{ upsert: true }`)
+- `upsertOne(modelOrObj, filter?, data?, writeArg?)` (sempre aplica `{ upsert: true }`)
+
+**Upserted document return:**
+If you want upsertOne to return the updated/inserted document, include one of these options in `writeArg`:
+
+- `{ options: { new: true }}` (preferred)
+- `{ options: { returnDocument: "after" }}`
+- `{ options: { returnDocument: true }}`
+  The method will use `findOneAndUpdate` and return the document as a plain object.
+  Otherwise, it returns the default result from `updateOne` (count).
 
 **Examples**
 
@@ -400,7 +409,18 @@ await db.createMany({ model: "products", docs: [{ sku: "X" }, { sku: "Y" }], wri
 await db.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { invalidatePrefixes: ["inventory:"] });
 
 // upsertOne (object)
+await db.upsertOne("inventory", { sku: "ABC-001" }, { $inc: { stock: 10 } }, { options: { new: true, setDefaultsOnInsert: true } });
+
+// upsertOne (object, retorna apenas contagem)
 await db.upsertOne({ model: "inventory", filter: { sku: "ABC-001" }, data: { $inc: { stock: 10 } }, writeArg: { invalidatePrefixes: ["inventory:"] } });
+
+// upsertOne (object, with returnDocument)
+await db.upsertOne({
+  model: "inventory",
+  filter: { sku: "ABC-001" },
+  data: { $inc: { stock: 10 } },
+  writeArg: { options: { new: true, setDefaultsOnInsert: true } },
+});
 ```
 
 ### Transactions
@@ -574,5 +594,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 7_  
-_Last update: 23-08-2025_
+_Document version: 8_  
+_Last update: 28-08-2025_
