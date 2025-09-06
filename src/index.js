@@ -243,6 +243,29 @@ function getAppRoot() {
 }
 
 /****************************************************
+ * ##: Pluralize a model name
+ * Simple pluralization by appending "s" if not already ending with "s"
+ * Only appends "s" if the last character is a letter (a-zA-Z).
+ * @param {String} model - Model name (string)
+ * @returns {String} - Pluralized model name
+ * History:
+ * 06-09-2025: Created
+ ****************************************************/
+function pluralizeName(model) {
+  try {
+    if (model.endsWith("s") || !/[a-zA-Z]$/.test(model)) {
+      return model;
+    }
+    return `${model}s`;
+
+    // Error handling
+  } catch (err) {
+    // Fallback: return the original model name
+    return model;
+  }
+}
+
+/****************************************************
  * ##: Resolve a Mongoose Model
  * Resolve a Mongoose Model from an exact model name (string).
  *
@@ -267,6 +290,7 @@ function getAppRoot() {
  * 19-08-2025: Fix model resolution logic and removed modelCache
  * 20-08-2025: Fix model directory resolution (from env variable)
  * 22-08-2025: Accept only string as model name
+ * 06-09-2025: Improve pluralization logic (only if last char is a letter)
  ****************************************************/
 const resolveModel = (model) => {
   // Only accept string for model name
@@ -274,8 +298,8 @@ const resolveModel = (model) => {
     throw new Error("resolveModel: model must be a string");
   }
 
-  // Provided as string → normalize to plural form
-  let name = model.endsWith("s") ? model : `${model}s`;
+  // Provided as string → normalize to plural form (only if last char is a letter)
+  const name = pluralizeName(model);
 
   // Try mongoose registry
   if (mongoose.models[name]) {
