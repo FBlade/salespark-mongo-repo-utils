@@ -3,6 +3,7 @@
   "version": "1.0.26",
   "description": "Utility helpers for MongoDB repositories with caching, metrics, and flexible model resolution.",
   "main": "src/index.js",
+  "types": "index.d.ts",
   "scripts": {
     "prepublishOnly": "echo 'No build step required for JS package'"
   },
@@ -18,6 +19,11 @@
   ],
   "author": "SalesPark",
   "license": "MIT",
+  "files": [
+    "src/",
+    "index.d.ts",
+    "README.md"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/FBlade/salespark-mongo-repo-utils.git"
