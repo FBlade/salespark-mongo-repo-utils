@@ -20,7 +20,7 @@ Peer requirement:
 
 ---
 
-All exported functions return a consistent shape:
+All exported functions return a consistent contract:
 
 ```js
 { status: Boolean, data: any }
@@ -29,7 +29,7 @@ All exported functions return a consistent shape:
 - `status: true` → success, `data` holds the result
 - `status: false` → failure, `data` holds the error object
 
-### Examples (return shape):
+### Examples (return contract):
 
 ```js
  // getOne - document found
@@ -231,9 +231,12 @@ await db.updateMany(
 
 - `getOne(modelOrObj, filter?, select?, populate?, cacheOpts?)`
 - `getMany(modelOrObj, filter?, select?, sort?, populate?, cacheOpts?)`
+- `getManyWithLimit(modelOrObj, filter?, select?, sort?, limit?, populate?, cacheOpts?)` — Get documents with a maximum limit (simple limiting without pagination metadata)
 - `aggregate(modelOrObj, pipeline?, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
 - `getManyWithPagination(modelOrObj, filter?, select?, sort?, page?, limit?, populate?, cacheOpts?)`
 - `countDocuments(modelOrObj, filter?, cacheOpts?)`
+
+> **Note:** `getManyWithLimit` vs `getManyWithPagination`: Use `getManyWithLimit` when you need simple result limiting without pagination metadata. Use `getManyWithPagination` when you need full pagination with page info, total counts, and navigation metadata.
 
 ---
 
@@ -294,6 +297,57 @@ await db.getMany({
   sort: { createdAt: -1 },
   populate: [
     { path: "products", select: ["field1", "field2"] },
+    { path: "customer", select: "name email" },
+  ],
+  cacheOpts: { enabled: true },
+});
+
+// getManyWithLimit with single populate (parameters)
+await db.getManyWithLimit(
+  "products", // collection
+  { active: true }, // filter
+  ["_id", "title", "price"], // projection
+  { createdAt: -1 }, // sort
+  50, // limit
+  { path: "category", select: "name" }, // populate
+  { enabled: true, ttl: "10m" } // cache
+);
+
+// getManyWithLimit with single populate (object)
+await db.getManyWithLimit({
+  model: "products",
+  filter: { active: true },
+  select: ["_id", "title", "price"],
+  sort: { createdAt: -1 },
+  limit: 50,
+  populate: { path: "category", select: "name" },
+  cacheOpts: { enabled: true, ttl: "10m" },
+});
+
+// getManyWithLimit with multiple populates (parameters)
+await db.getManyWithLimit(
+  "orders", // collection
+  { status: "pending" }, // filter
+  ["_id", "total", "date"], // projection
+  { createdAt: -1 }, // sort
+  25, // limit
+  // populate (multiple)
+  [
+    { path: "products", select: ["name", "price"] },
+    { path: "customer", select: "name email" },
+  ],
+  { enabled: true } // cache
+);
+
+// getManyWithLimit with multiple populates (object)
+await db.getManyWithLimit({
+  model: "orders",
+  filter: { status: "pending" },
+  select: ["_id", "total", "date"],
+  sort: { createdAt: -1 },
+  limit: 25,
+  populate: [
+    { path: "products", select: ["name", "price"] },
     { path: "customer", select: "name email" },
   ],
   cacheOpts: { enabled: true },
@@ -594,5 +648,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 8_  
-_Last update: 28-08-2025_
+_Document version: 9_  
+_Last update: 04-10-2025_

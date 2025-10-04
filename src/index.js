@@ -995,6 +995,89 @@ const getMany = async (modelOrObj, filter, select = [], sort = {}, populate, cac
 };
 
 /*******************************************************
+ * ##: Get many documents from a model
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, sort, populate, cacheOpts }
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Array} [select=[]] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Object} [sort={}] - Sort object (if modelOrObj is string or missing in object)
+ * @param {Number} limit - Maximum number of documents to return
+ * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
+ * History:
+ * 04-10-2025: Created (copy of getMany)
+ *******************************************************/
+const getManyWithLimit = async (modelOrObj, filter, select = [], sort = {}, limit, populate, cacheOpts) => {
+  try {
+    let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedLimit, resolvedPopulate, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedSelect = modelOrObj.select ?? select;
+      resolvedSort = modelOrObj.sort ?? sort;
+      resolvedLimit = modelOrObj.limit ?? limit;
+      resolvedPopulate = modelOrObj.populate ?? populate;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedFilter = filter;
+      resolvedSelect = select;
+      resolvedSort = sort;
+      resolvedLimit = limit;
+      resolvedPopulate = populate;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "getMany/validation");
+    }
+
+    // Resolve the model (cached)
+    const Model = await resolveModel(model);
+
+    // Build operation name and start time
+    const opName = `getManyWithLimit:${model}`;
+    const start = _nowNs();
+
+    // Query executor (with populate support)
+    const runQuery = async () => {
+      let query = Model.find(resolvedFilter, resolvedSelect).sort(resolvedSort);
+      if (resolvedLimit && typeof resolvedLimit === "number" && resolvedLimit > 0) {
+        query = query.limit(resolvedLimit);
+      }
+      if (resolvedPopulate) query = query.populate(resolvedPopulate);
+      const docs = await query.lean();
+
+      // Record database operation metrics
+      _recordDb(opName, start);
+
+      // Return the found documents
+      return ok(docs);
+    };
+
+    // Use cache only if cacheOpts is defined/active
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache(
+        "getManyWithLimit",
+        [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedLimit, resolvedPopulate],
+        resolvedCacheOpts,
+        runQuery
+      );
+    }
+
+    // Find the documents without cache
+    return await runQuery();
+
+    // Error handling
+  } catch (err) {
+    return fail(err, "getManyWithLimit");
+  }
+};
+
+/*******************************************************
  * ##: Aggregate documents in a model
  * Executes a MongoDB aggregation pipeline.
  * @param {String|Object} modelOrObj - Model name (string) or object with { model, pipeline, cacheOpts }
@@ -1582,6 +1665,7 @@ module.exports = {
   createMany,
   getOne,
   getMany,
+  getManyWithLimit,
   getManyWithPagination,
   aggregate,
   updateOne,
