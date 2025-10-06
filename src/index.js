@@ -266,6 +266,43 @@ function pluralizeName(model) {
 }
 
 /****************************************************
+ * ##: Add a model file
+ * @param {String} name - Model name (string)
+ * @param {String} filePath - Path to the model file (string)
+ * @returns {Promise} - Result of the operation
+ * History:
+ * 05-10-2025: Created
+ ****************************************************/
+const addModelByFile = async (name, filePath) => {
+  try {
+    if (typeof filePath !== "string" || !filePath.trim()) {
+      return fail(new Error("filePath must be a non-empty string"), "addModelFile");
+    }
+    // Check if model is already loaded (by name)
+    if (mongoose.models[name]) {
+      return ok({ message: `Model "${name}" is already loaded` });
+    }
+
+    // Check if Model dir exists
+    if (!MODELS_DIR) {
+      setModelsDir(getModelsDir());
+    }
+
+    // Check if file exists (relative to app root + MODELS_DIR)
+    const fullPath = path.isAbsolute(filePath) ? filePath : path.join(getAppRoot(), MODELS_DIR, filePath);
+    await fs.promises.access(fullPath, fs.constants.R_OK);
+    require(fullPath); // Require the file to load the model
+
+    // Verify if model is now loaded
+    if (mongoose.models[name]) {
+      return ok({ message: `Model "${name}" loaded successfully from ${fullPath}` });
+    }
+  } catch (error) {
+    return fail(error, "addModelFile");
+  }
+};
+
+/****************************************************
  * ##: Resolve a Mongoose Model
  * Resolve a Mongoose Model from an exact model name (string).
  *
@@ -841,11 +878,12 @@ const createMany = async (modelOrObj, docs, writeArg) => {
 /*******************************************************
  * ##: Get a single document from a model (with populate - optional)
  * Resolve a model and retrieve a single document, with optional
- * field selection, population of references, and caching.
+ * field selection, population of references, sorting, and caching.
  *
- * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, populate, cacheOpts }
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, sort, populate, cacheOpts }
  * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
  * @param {Array|String} [select] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Object} [sort] - Sort object (if modelOrObj is string or missing in object)
  * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
  * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  *
@@ -855,16 +893,18 @@ const createMany = async (modelOrObj, docs, writeArg) => {
  * 22-08-2025: Change parameter order
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases)
+ * 06-10-2025: Added sort support
  *******************************************************/
-const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
+const getOne = async (modelOrObj, filter, select, sort, populate, cacheOpts) => {
   try {
-    let model, resolvedFilter, resolvedSelect, resolvedPopulate, resolvedCacheOpts;
+    let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate, resolvedCacheOpts;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
       // If first arg is an object, extract properties with fallback to extra args
       model = modelOrObj.model;
       resolvedFilter = modelOrObj.filter ?? filter;
       resolvedSelect = modelOrObj.select ?? select;
+      resolvedSort = modelOrObj.sort ?? sort;
       resolvedPopulate = modelOrObj.populate ?? populate;
       resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
     } else {
@@ -872,6 +912,7 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
       model = modelOrObj;
       resolvedFilter = filter;
       resolvedSelect = select;
+      resolvedSort = sort;
       resolvedPopulate = populate;
       resolvedCacheOpts = cacheOpts;
     }
@@ -891,9 +932,10 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
     const opName = `getOne:${model}`;
     const start = _nowNs();
 
-    // Query executor (with populate support)
+    // Query executor (with populate and sort support)
     const runQuery = async () => {
       let query = Model.findOne(resolvedFilter, resolvedSelect);
+      if (resolvedSort) query = query.sort(resolvedSort);
       if (resolvedPopulate) query = query.populate(resolvedPopulate);
       const doc = await query.lean();
 
@@ -906,7 +948,7 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
 
     // If caching is enabled, wrap query with cache logic
     if (resolvedCacheOpts?.enabled) {
-      return await withCache("getOne", [model, resolvedFilter, resolvedSelect, resolvedPopulate], resolvedCacheOpts, runQuery);
+      return await withCache("getOne", [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate], resolvedCacheOpts, runQuery);
     }
 
     // Execute query without cache
@@ -922,8 +964,8 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
  * ##: Get many documents from a model
  * @param {String|Object} modelOrObj - Model name (string) or object with { model, filter, select, sort, populate, cacheOpts }
  * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
- * @param {Array} [select=[]] - Fields to select (if modelOrObj is string or missing in object)
- * @param {Object} [sort={}] - Sort object (if modelOrObj is string or missing in object)
+ * @param {Array} [select] - Fields to select (if modelOrObj is string or missing in object)
+ * @param {Object} [sort] - Sort object (if modelOrObj is string or missing in object)
  * @param {Array|Object|String} [populate] - Populate definition(s) (if modelOrObj is string or missing in object)
  * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
  * History:
@@ -933,7 +975,7 @@ const getOne = async (modelOrObj, filter, select, populate, cacheOpts) => {
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases)
  *******************************************************/
-const getMany = async (modelOrObj, filter, select = [], sort = {}, populate, cacheOpts) => {
+const getMany = async (modelOrObj, filter, select, sort, populate, cacheOpts) => {
   try {
     let model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPopulate, resolvedCacheOpts;
 
@@ -1685,4 +1727,5 @@ module.exports = {
   setLogger,
   setModelsDir,
   setCache,
+  addModelByFile,
 };

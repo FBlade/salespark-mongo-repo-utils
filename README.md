@@ -229,7 +229,7 @@ await db.updateMany(
 
 ### Read
 
-- `getOne(modelOrObj, filter?, select?, populate?, cacheOpts?)`
+- `getOne(modelOrObj, filter?, select?, sort?, populate?, cacheOpts?)`
 - `getMany(modelOrObj, filter?, select?, sort?, populate?, cacheOpts?)`
 - `getManyWithLimit(modelOrObj, filter?, select?, sort?, limit?, populate?, cacheOpts?)` — Get documents with a maximum limit (simple limiting without pagination metadata)
 - `aggregate(modelOrObj, pipeline?, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
@@ -248,12 +248,31 @@ await db.getOne(
   "orders", // collection
   { _id: "123" }, // filter
   null, // projection
+  null, // sort
   { path: "customer", select: "name email" }, // populate
   { enabled: true, ttl: "1h" } // cache
 );
 
+// getOne with sort (parameters) - get most recent order
+await db.getOne(
+  "orders", // collection
+  { status: "pending" }, // filter
+  null, // projection
+  { createdAt: -1 }, // sort (most recent first)
+  null, // populate
+  { enabled: true, ttl: "5m" } // cache
+);
+
 // getOne with populate (object)
 await db.getOne({ model: "orders", filter: { _id: "123" }, populate: { path: "customer", select: "name email" }, cacheOpts: { enabled: true, ttl: "1h" } });
+
+// getOne with sort (object) - get highest scoring user
+await db.getOne({
+  model: "users",
+  filter: { active: true },
+  sort: { score: -1 },
+  cacheOpts: { enabled: true, ttl: "10m" },
+});
 
 // getMany with single populate (parameters)
 await db.getMany(
@@ -648,5 +667,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 9_  
-_Last update: 04-10-2025_
+_Document version: 10_  
+_Last update: 06-10-2025_

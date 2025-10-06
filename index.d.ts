@@ -134,11 +134,19 @@ declare module "@salespark/mongo-repo-utils" {
    * @param model - Model name (string)
    * @param filter - MongoDB filter object
    * @param select - Fields to include/exclude in results
+   * @param sort - Sort criteria for ordering results
    * @param populate - Population options for referenced documents
    * @param cacheOpts - Cache configuration options
    * @returns Promise resolving to found document or null in { status, data } format
    */
-  export function getOne(model: string, filter: object, select?: string[] | string, populate?: any, cacheOpts?: CacheOptions): Promise<ApiResponse>;
+  export function getOne(
+    model: string,
+    filter: object,
+    select?: string[] | string,
+    sort?: object,
+    populate?: any,
+    cacheOpts?: CacheOptions
+  ): Promise<ApiResponse>;
 
   /**
    * Finds a single document using object-style parameters
@@ -149,6 +157,7 @@ declare module "@salespark/mongo-repo-utils" {
     model: string;
     filter: object;
     select?: string[] | string;
+    sort?: object;
     populate?: any;
     cacheOpts?: CacheOptions;
   }): Promise<ApiResponse>;
