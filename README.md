@@ -128,6 +128,22 @@ db.setModelsDir(path.join(__dirname, "models"));
 // Or folder ./models if nothing is set
 ```
 
+**Loading all models at startup:**
+
+To ensure all models are registered before any populate operations, you can load them all at once:
+
+```js
+const { loadModels } = require("@salespark/mongo-repo-utils");
+
+// Call this at application startup
+const result = loadModels();
+if (result.status) {
+  console.log(`Loaded ${result.data.modelsRegistered} models from ${result.data.filesLoaded} files`);
+} else {
+  console.error("Failed to load models:", result.data);
+}
+```
+
 **Resolution rules:**
 
 - You can pass a Mongoose Model instance directly _or_ a string name.
@@ -667,5 +683,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 10_  
-_Last update: 06-10-2025_
+_Document version: 11_  
+_Last update: 12-10-2025_

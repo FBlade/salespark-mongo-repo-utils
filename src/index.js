@@ -15,6 +15,66 @@ const DEFAULT_TTL = 60_000;
 let MODELS_DIR = null;
 
 /*******************************************************
+ * ##: Load all models from models directory
+ * Automatically loads all model files from the configured models directory.
+ * This is useful to call at application startup to ensure all models are
+ * registered before any populate operations.
+ * @returns {Object} - Result with status and loaded models info
+ * History:
+ * 12-10-2025: Created
+ *******************************************************/
+const loadModels = () => {
+  try {
+    const dir = getModelsDir();
+    const fullPath = path.isAbsolute(dir) ? dir : path.join(getAppRoot(), dir);
+
+    // Check if models directory exists
+    if (!fs.existsSync(fullPath)) {
+      return fail(new Error(`Models directory not found: ${fullPath}`), "loadModels");
+    }
+
+    if (!fs.lstatSync(fullPath).isDirectory()) {
+      return fail(new Error(`Models path is not a directory: ${fullPath}`), "loadModels");
+    }
+
+    const files = fs.readdirSync(fullPath);
+    const modelFiles = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs") || file.endsWith(".mjs"));
+
+    const loadedModels = [];
+    const beforeCount = Object.keys(mongoose.models).length;
+
+    modelFiles.forEach((file) => {
+      try {
+        const filePath = path.join(fullPath, file);
+        require(filePath);
+        loadedModels.push(file);
+      } catch (fileError) {
+        logger.error(`Error loading model file ${file}:`, fileError);
+        // Continue loading other files even if one fails
+      }
+    });
+
+    const afterCount = Object.keys(mongoose.models).length;
+    const newModelsCount = afterCount - beforeCount;
+
+    const result = {
+      directory: fullPath,
+      filesProcessed: modelFiles.length,
+      filesLoaded: loadedModels.length,
+      modelsRegistered: newModelsCount,
+      totalModels: afterCount,
+      loadedFiles: loadedModels,
+    };
+
+    logger.info(`Models loaded: ${newModelsCount} new models from ${loadedModels.length}/${modelFiles.length} files`);
+
+    return ok(result);
+  } catch (error) {
+    return fail(error, "loadModels");
+  }
+};
+
+/*******************************************************
  * ##: Set Models Directory
  * Set the models directory
  * @param {String} dir - The models directory
@@ -390,6 +450,7 @@ const resolveModel = (model) => {
  *   - { status: true, data: <string> }
  *   - { status: false, data: <Error> }
  * @param {Any} value - The value to stringify
+ * @returns {SalesParkContract<object>} - Return a SalesPark Contract object
  * History:
  * 14-08-2025: Created
  *******************************************************/
@@ -449,6 +510,7 @@ const stableStringify = (value) => {
  * Builds a cache key from function name and arguments
  * @param {String} fnName - Function name
  * @param {Array} args - Function arguments
+ * @returns {SalesParkContract<object>} - Return a SalesPark Contract object
  * History:
  * 14-08-2025: Created
  *******************************************************/
@@ -1702,6 +1764,7 @@ const safeQuery = async (fn, ...args) => {
 module.exports = {
   // model resolver
   resolveModel,
+  loadModels,
   // ops
   createOne,
   createMany,

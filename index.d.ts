@@ -75,6 +75,20 @@ declare module "@salespark/mongo-repo-utils" {
   export function resolveModel(modelName: string): any;
 
   /**
+   * Loads all models from the configured models directory
+   * Useful to call at application startup to ensure all models are registered
+   * @returns Response with information about loaded models
+   */
+  export function loadModels(): ApiResponse<{
+    directory: string;
+    filesProcessed: number;
+    filesLoaded: number;
+    modelsRegistered: number;
+    totalModels: number;
+    loadedFiles: string[];
+  }>;
+
+  /**
    * Sets the directory path where Mongoose models are located
    * @param dir - Absolute path to the models directory
    * @returns Response indicating success or failure
