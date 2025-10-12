@@ -66,9 +66,9 @@ const loadModels = () => {
       loadedFiles: loadedModels,
     };
 
-    logger.info(`Models loaded: ${newModelsCount} new models from ${loadedModels.length}/${modelFiles.length} files`);
-
     return ok(result);
+
+    // Error handling
   } catch (error) {
     return fail(error, "loadModels");
   }
@@ -102,7 +102,13 @@ const getModelsDir = () => {
 };
 
 // Define noop logger
+// Define noop logger that supports both direct calls and method calls
 const noopLogger = () => {};
+noopLogger.info = () => {};
+noopLogger.error = () => {};
+noopLogger.warn = () => {};
+noopLogger.log = () => {};
+noopLogger.debug = () => {};
 let logger = noopLogger;
 
 /*******************************************************
@@ -113,9 +119,25 @@ let logger = noopLogger;
  * 16-08-2025: Created
  * 20-08-2025: Updated
  * 22-08-2025: Updated (Add validation)
+ * 12-10-2025: Enhanced to support both function calls and object methods
  *******************************************************/
 const setLogger = (_logger) => {
-  logger = typeof _logger === "function" ? _logger : noopLogger;
+  if (typeof _logger === "function") {
+    logger = _logger;
+    // If it's a simple function, add method support for common log levels
+    if (!logger.info) {
+      logger.info = _logger;
+      logger.error = _logger;
+      logger.warn = _logger;
+      logger.log = _logger;
+      logger.debug = _logger;
+    }
+  } else if (_logger && typeof _logger === "object") {
+    // If it's an object (like console), use it directly
+    logger = _logger;
+  } else {
+    logger = noopLogger;
+  }
   return ok({ message: "Logger set" });
 };
 /*******************************************************
@@ -216,9 +238,35 @@ const resetMetrics = () => {
   return ok({ message: "Metrics reset" });
 };
 
-// Helper functions for response handling
+/*******************************************************
+ * ##: Success response helper
+ * Creates a standardized success response object
+ * @param {Any} data - The data to include in the response
+ * @returns {Object} - Response object with { status: true, data }
+ * History:
+ * 14-08-2025: Created
+ *******************************************************/
 const ok = (data) => ({ status: true, data });
-const fail = (err, ctx) => (logger(err, ctx), { status: false, data: err });
+
+/*******************************************************
+ * ##: Error response helper
+ * Creates a standardized error response object and logs the error
+ * @param {Error} err - The error object to include in the response
+ * @param {String} ctx - Context string for logging (e.g., function name)
+ * @returns {Object} - Response object with { status: false, data: err }
+ * History:
+ * 14-08-2025: Created
+ * 12-10-2025: Enhanced to handle both function and object loggers
+ *******************************************************/
+const fail = (err, ctx) => {
+  // Handle both function loggers and object loggers
+  if (typeof logger === "function") {
+    logger(err, ctx);
+  } else if (logger && typeof logger.error === "function") {
+    logger.error(ctx, err);
+  }
+  return { status: false, data: err };
+};
 
 /*******************************************************
  * ##: Hash a string
