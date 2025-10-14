@@ -139,18 +139,30 @@ const { loadModels } = require("@salespark/mongo-repo-utils");
 const result = loadModels();
 if (result.status) {
   console.log(`Loaded ${result.data.modelsRegistered} models from ${result.data.filesLoaded} files`);
+  console.log(`Total models available: ${result.data.totalModels}`);
+  console.log(`Files processed: ${result.data.filesProcessed}`);
 } else {
   console.error("Failed to load models:", result.data);
 }
 ```
+
+The `loadModels()` function:
+
+- Scans all `.js`, `.cjs`, and `.mjs` files in your models directory
+- Requires each file to register models with Mongoose
+- Continues loading other files even if individual files fail
+- Returns detailed statistics about the loading process
+- **Recommended**: Call this during application startup to ensure all models are available for populate operations
 
 **Resolution rules:**
 
 - You can pass a Mongoose Model instance directly _or_ a string name.
 - When a string name is used, the module will:
   1. Try `mongoose.models[name]`
-  2. Require a file at `<MODELS_DIR>/<name>` that exports/registers the model
+  2. If not found, load ALL model files from `<MODELS_DIR>` directory (supports `.js`, `.cjs`, `.mjs`)
+  3. Check `mongoose.models[name]` after each file is loaded
 - A simple pluralization is applied if `name` does not end with `s` (e.g. `"user"` → `"users"`).
+- **Note**: Model names don't need to match filenames - the system will find models regardless of the file they're defined in.
 
 ### Logger injection (optional)
 
@@ -551,7 +563,7 @@ await db.withTransaction(
 - `safeQuery(fnOrExportedName, ...args)` — runs and always returns `{ status, data }`
 - `getMetrics()` — snapshot of DB/cache timings per operation
 - `resetMetrics()` — clears metrics
-- `resolveModel(modelOrName)` — resolves a model instance or requires from `<MODELS_DIR>/<name>`
+- `resolveModel(modelOrName)` — resolves a model instance or loads all model files to find the requested model
 - `invalidateCache(input)` — manually invalidate cache by keys and/or prefixes
 
 **invalidateCache examples:**
