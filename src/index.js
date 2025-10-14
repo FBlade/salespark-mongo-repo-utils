@@ -414,21 +414,15 @@ const addModelByFile = async (name, filePath) => {
  * ##: Resolve a Mongoose Model
  * Resolve a Mongoose Model from an exact model name (string).
  *
- * Assumptions:
- * - The provided name matches exactly the registered model name in mongoose.models
- *   OR matches exactly the filename under ../models/<name> that registers/exports the model.
- * - No heuristics beyond optional pluralization. No fuzzy matching, no case conversion.
- *
  * Resolution logic:
  * 1. Accepts only a string as model name. Throws if not string.
  * 2. Pluralizes the name if needed (appends "s").
  * 3. Checks mongoose.models registry for the model.
- * 4. Requires the corresponding file under MODELS_DIR if not found.
- *    Expectation: this file either registers the Model into mongoose.models
- *    OR directly exports the Model.
- * 5. Re-checks mongoose.models registry. If found, returns it.
- * 6. If not found but the module export is itself a Model, returns it.
- * 7. Otherwise, throws descriptive error.
+ * 4. If not found, attempts to load ALL model files from MODELS_DIR
+ *    (since model name may not match filename).
+ * 5. Re-checks mongoose.models registry after each file load.
+ * 6. Returns the model if found, otherwise throws descriptive error.
+ *
  * @param {String} model - Model name (string)
  * History:
  * 14-08-2025: Created
@@ -436,6 +430,7 @@ const addModelByFile = async (name, filePath) => {
  * 20-08-2025: Fix model directory resolution (from env variable)
  * 22-08-2025: Accept only string as model name
  * 06-09-2025: Improve pluralization logic (only if last char is a letter)
+ * 14-10-2025: Fixed to load all model files instead of assuming filename=modelname
  ****************************************************/
 const resolveModel = (model) => {
   // Only accept string for model name
@@ -456,22 +451,39 @@ const resolveModel = (model) => {
     setModelsDir(getModelsDir());
   }
 
-  // Build candidate path
-  const candidatePath = path.join(getAppRoot(), MODELS_DIR, name);
-  const exported = require(candidatePath);
+  // Try to load all models first if model not found
+  const fullPath = path.isAbsolute(MODELS_DIR) ? MODELS_DIR : path.join(getAppRoot(), MODELS_DIR);
 
-  // Check registry again (never trust direct import return)
+  if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isDirectory()) {
+    const files = fs.readdirSync(fullPath);
+    const modelFiles = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs") || file.endsWith(".mjs"));
+
+    // Try to load all model files until we find our model
+    for (const file of modelFiles) {
+      try {
+        const filePath = path.join(fullPath, file);
+        require(filePath);
+
+        // Check if our model is now registered
+        if (mongoose.models[name]) {
+          return mongoose.models[name];
+        }
+      } catch (fileError) {
+        // Continue trying other files
+        logger.debug && logger.debug(`Failed to load model file ${file}:`, fileError);
+      }
+    }
+  }
+
+  // Final check after trying to load all files
   if (mongoose.models[name]) {
     return mongoose.models[name];
   }
 
-  // Fallback: if export itself is a Model
-  if (exported?.modelName) {
-    return exported;
-  }
-
   // If still not resolved → throw
-  throw new Error(`Mongoose model "${name}" not found (expected registered as mongoose.models["${name}"] or exported by ${candidatePath})`);
+  throw new Error(
+    `Mongoose model "${name}" not found after loading all model files from ${fullPath}. Available models: ${Object.keys(mongoose.models).join(", ")}`
+  );
 };
 
 /*******************************************************
