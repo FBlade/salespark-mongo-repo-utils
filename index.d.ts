@@ -69,6 +69,7 @@ declare module "@salespark/mongo-repo-utils" {
 
   /**
    * Resolves a Mongoose model by name from the configured models directory
+   * Loads all model files if the model is not initially found in mongoose.models registry
    * @param modelName - The name of the model to resolve (will be pluralized if needed)
    * @returns The resolved Mongoose model
    */
@@ -76,8 +77,9 @@ declare module "@salespark/mongo-repo-utils" {
 
   /**
    * Loads all models from the configured models directory
+   * Scans all .js, .cjs, and .mjs files and requires them to register models
    * Useful to call at application startup to ensure all models are registered
-   * @returns Response with information about loaded models
+   * @returns Response with detailed information about loaded models and statistics
    */
   export function loadModels(): ApiResponse<{
     directory: string;
@@ -108,6 +110,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @returns Response indicating success or failure
    */
   export function setCache(cache: CacheInterface): ApiResponse<{ message: string }>;
+
+  /**
+   * Adds a specific model file by loading it from the given file path
+   * @param name - The name of the model to check if it's loaded after requiring the file
+   * @param filePath - Path to the model file (absolute or relative to models directory)
+   * @returns Promise resolving to result indicating success or failure
+   */
+  export function addModelByFile(name: string, filePath: string): Promise<ApiResponse<{ message: string }>>;
 
   // CRUD Operations
 
