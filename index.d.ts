@@ -88,6 +88,8 @@ declare module "@salespark/mongo-repo-utils" {
     modelsRegistered: number;
     totalModels: number;
     loadedFiles: string[];
+    registeredModels: string[];
+    allModels: string[];
   }>;
 
   /**
@@ -96,6 +98,13 @@ declare module "@salespark/mongo-repo-utils" {
    * @returns Response indicating success or failure
    */
   export function setModelsDir(dir: string): ApiResponse<{ message: string }>;
+
+  /**
+   * Sets the mongoose instance to use (important for sharing models with host app)
+   * @param mongooseInstance - The mongoose instance from the host application
+   * @returns Response indicating success or failure
+   */
+  export function setMongoose(mongooseInstance: any): ApiResponse<{ message: string }>;
 
   /**
    * Configures a logger function for error reporting

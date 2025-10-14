@@ -1,9 +1,29 @@
 const path = require("path");
-const mongoose = require("mongoose");
+let mongoose = require("mongoose"); // Default mongoose instance
 const fs = require("fs"); //required for fs.promises
 
 // Define default time-to-live for cache in milliseconds
 const DEFAULT_TTL = 60_000;
+
+// ======================================================
+// ##: MONGOOSE configuration
+// Allow injecting a custom mongoose instance to share with the host application
+// ======================================================
+
+/*******************************************************
+ * ##: Set Mongoose Instance
+ * Set the mongoose instance to use (important for sharing models with host app)
+ * @param {Object} mongooseInstance - The mongoose instance from the host application
+ * History:
+ * 14-10-2025: Created to fix model sharing issues
+ *******************************************************/
+const setMongoose = (mongooseInstance) => {
+  if (!mongooseInstance || typeof mongooseInstance !== "object") {
+    return fail(new Error("Mongoose instance must be provided"), "setMongoose");
+  }
+  mongoose = mongooseInstance;
+  return ok({ message: "Mongoose instance set successfully" });
+};
 
 // ======================================================
 // ##: MODELS_DIR configuration
@@ -40,30 +60,37 @@ const loadModels = () => {
     const files = fs.readdirSync(fullPath);
     const modelFiles = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs") || file.endsWith(".mjs"));
 
-    const loadedModels = [];
-    const beforeCount = Object.keys(mongoose.models).length;
+    const loadedFiles = [];
+    const beforeModels = Object.keys(mongoose.models);
+    const beforeCount = beforeModels.length;
 
     modelFiles.forEach((file) => {
       try {
         const filePath = path.join(fullPath, file);
         require(filePath);
-        loadedModels.push(file);
+        loadedFiles.push(file);
       } catch (fileError) {
         logger.error(`Error loading model file ${file}:`, fileError);
         // Continue loading other files even if one fails
       }
     });
 
-    const afterCount = Object.keys(mongoose.models).length;
+    const afterModels = Object.keys(mongoose.models);
+    const afterCount = afterModels.length;
     const newModelsCount = afterCount - beforeCount;
+
+    // Get the newly registered model names (not filenames)
+    const newlyRegisteredModels = afterModels.filter((model) => !beforeModels.includes(model));
 
     const result = {
       directory: fullPath,
       filesProcessed: modelFiles.length,
-      filesLoaded: loadedModels.length,
+      filesLoaded: loadedFiles.length,
       modelsRegistered: newModelsCount,
       totalModels: afterCount,
-      loadedFiles: loadedModels,
+      loadedFiles: loadedFiles,
+      registeredModels: newlyRegisteredModels,
+      allModels: afterModels,
     };
 
     return ok(result);
@@ -493,7 +520,7 @@ const resolveModel = (model) => {
   const availableModels = Object.keys(mongoose.models);
   throw new Error(
     `Mongoose model "${model}" (or "${name}") not found after loading all model files from ${fullPath}. ` +
-    `Available models (${availableModels.length}): ${availableModels.join(', ')}`
+      `Available models (${availableModels.length}): ${availableModels.join(", ")}`
   );
 };
 
@@ -1859,6 +1886,7 @@ module.exports = {
   resetMetrics,
   // others
   setLogger,
+  setMongoose,
   setModelsDir,
   setCache,
   addModelByFile,

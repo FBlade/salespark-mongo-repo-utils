@@ -122,11 +122,34 @@ Priority:
 4. An error is only thrown if the default directory does not exist or the requested model cannot be found
 
 ```js
-db.setModelsDir(path.join(__dirname, "models"));
+const { setModelsDir, setMongoose, loadModels } = require("@salespark/mongo-repo-utils");
+const mongoose = require("mongoose"); // Your project's mongoose instance
+
+// IMPORTANT: Share your mongoose instance with the package
+setMongoose(mongoose);
+
+setModelsDir(path.join(__dirname, "models"));
 // or via environment variable (.env):
 // SP_MONGO_REPO_MODELS_DIR=/abs/path/to/models
 // Or folder ./models if nothing is set
 ```
+
+**Sharing Mongoose Instance (IMPORTANT):**
+
+To ensure models are properly shared between your application and this package, you must configure the mongoose instance:
+
+```js
+const mongoose = require("mongoose");
+const { setMongoose } = require("@salespark/mongo-repo-utils");
+
+// Share your mongoose instance with the package
+setMongoose(mongoose);
+```
+
+**Why is this necessary?**
+- When installed as a package, this library might use a different mongoose instance
+- Models registered in one instance won't be available in another
+- By sharing the instance, all models are registered in the same place
 
 **Loading all models at startup:**
 
@@ -141,6 +164,8 @@ if (result.status) {
   console.log(`Loaded ${result.data.modelsRegistered} models from ${result.data.filesLoaded} files`);
   console.log(`Total models available: ${result.data.totalModels}`);
   console.log(`Files processed: ${result.data.filesProcessed}`);
+  console.log(`Newly registered models: ${result.data.registeredModels.join(', ')}`);
+  console.log(`All available models: ${result.data.allModels.join(', ')}`);
 } else {
   console.error("Failed to load models:", result.data);
 }
@@ -151,7 +176,10 @@ The `loadModels()` function:
 - Scans all `.js`, `.cjs`, and `.mjs` files in your models directory
 - Requires each file to register models with Mongoose
 - Continues loading other files even if individual files fail
-- Returns detailed statistics about the loading process
+- Returns detailed statistics about the loading process including:
+  - `loadedFiles`: Array of filenames that were successfully loaded
+  - `registeredModels`: Array of model names that were newly registered
+  - `allModels`: Array of all available model names in mongoose.models
 - **Recommended**: Call this during application startup to ensure all models are available for populate operations
 
 **Resolution rules:**
