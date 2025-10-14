@@ -438,11 +438,14 @@ const resolveModel = (model) => {
     throw new Error("resolveModel: model must be a string");
   }
 
-  // Provided as string → normalize to plural form (only if last char is a letter)
-  const name = pluralizeName(model);
+  // First try the original name exactly as provided
+  if (mongoose.models[model]) {
+    return mongoose.models[model];
+  }
 
-  // Try mongoose registry
-  if (mongoose.models[name]) {
+  // Then try pluralized form (only if last char is a letter and doesn't end with 's')
+  const name = pluralizeName(model);
+  if (name !== model && mongoose.models[name]) {
     return mongoose.models[name];
   }
 
@@ -464,8 +467,11 @@ const resolveModel = (model) => {
         const filePath = path.join(fullPath, file);
         require(filePath);
 
-        // Check if our model is now registered
-        if (mongoose.models[name]) {
+        // Check if our model is now registered (try both original and pluralized)
+        if (mongoose.models[model]) {
+          return mongoose.models[model];
+        }
+        if (name !== model && mongoose.models[name]) {
           return mongoose.models[name];
         }
       } catch (fileError) {
@@ -476,13 +482,18 @@ const resolveModel = (model) => {
   }
 
   // Final check after trying to load all files
-  if (mongoose.models[name]) {
+  if (mongoose.models[model]) {
+    return mongoose.models[model];
+  }
+  if (name !== model && mongoose.models[name]) {
     return mongoose.models[name];
   }
 
   // If still not resolved → throw
+  const availableModels = Object.keys(mongoose.models);
   throw new Error(
-    `Mongoose model "${name}" not found after loading all model files from ${fullPath}. Available models: ${Object.keys(mongoose.models).join(", ")}`
+    `Mongoose model "${model}" (or "${name}") not found after loading all model files from ${fullPath}. ` +
+    `Available models (${availableModels.length}): ${availableModels.join(', ')}`
   );
 };
 
