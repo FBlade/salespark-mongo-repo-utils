@@ -35,13 +35,15 @@ const setMongoose = (mongooseInstance) => {
 let MODELS_DIR = null;
 
 /*******************************************************
- * ##: Load all models from models directory
- * Automatically loads all model files from the configured models directory.
+ * ##: Load all models from models directory (recursively)
+ * Automatically loads all model files from the configured models directory
+ * and all its subdirectories recursively.
  * This is useful to call at application startup to ensure all models are
  * registered before any populate operations.
  * @returns {Object} - Result with status and loaded models info
  * History:
  * 12-10-2025: Created
+ * 16-10-2025: Enhanced to support recursive directory scanning
  *******************************************************/
 const loadModels = () => {
   try {
@@ -57,20 +59,43 @@ const loadModels = () => {
       return fail(new Error(`Models path is not a directory: ${fullPath}`), "loadModels");
     }
 
-    const files = fs.readdirSync(fullPath);
-    const modelFiles = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs") || file.endsWith(".mjs"));
+    // Helper function to recursively find all model files
+    const findModelFiles = (dirPath, relativePath = '') => {
+      const files = [];
+      const items = fs.readdirSync(dirPath);
 
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const itemRelativePath = path.join(relativePath, item);
+        const stat = fs.lstatSync(itemPath);
+
+        if (stat.isDirectory()) {
+          // Recursively scan subdirectories
+          files.push(...findModelFiles(itemPath, itemRelativePath));
+        } else if (stat.isFile() && (item.endsWith(".js") || item.endsWith(".cjs") || item.endsWith(".mjs"))) {
+          // Add model files
+          files.push({
+            absolutePath: itemPath,
+            relativePath: itemRelativePath,
+            filename: item
+          });
+        }
+      }
+
+      return files;
+    };
+
+    const modelFiles = findModelFiles(fullPath);
     const loadedFiles = [];
     const beforeModels = Object.keys(mongoose.models);
     const beforeCount = beforeModels.length;
 
-    modelFiles.forEach((file) => {
+    modelFiles.forEach((fileInfo) => {
       try {
-        const filePath = path.join(fullPath, file);
-        require(filePath);
-        loadedFiles.push(file);
+        require(fileInfo.absolutePath);
+        loadedFiles.push(fileInfo.relativePath);
       } catch (fileError) {
-        logger.error(`Error loading model file ${file}:`, fileError);
+        logger.error(`Error loading model file ${fileInfo.relativePath}:`, fileError);
         // Continue loading other files even if one fails
       }
     });
@@ -481,17 +506,36 @@ const resolveModel = (model) => {
     setModelsDir(getModelsDir());
   }
 
-  // Try to load all models first if model not found
+  // Try to load all models first if model not found (recursively)
   const fullPath = path.isAbsolute(MODELS_DIR) ? MODELS_DIR : path.join(getAppRoot(), MODELS_DIR);
 
   if (fs.existsSync(fullPath) && fs.lstatSync(fullPath).isDirectory()) {
-    const files = fs.readdirSync(fullPath);
-    const modelFiles = files.filter((file) => file.endsWith(".js") || file.endsWith(".cjs") || file.endsWith(".mjs"));
+    // Helper function to recursively find all model files
+    const findModelFilesRecursive = (dirPath) => {
+      const files = [];
+      const items = fs.readdirSync(dirPath);
+
+      for (const item of items) {
+        const itemPath = path.join(dirPath, item);
+        const stat = fs.lstatSync(itemPath);
+
+        if (stat.isDirectory()) {
+          // Recursively scan subdirectories
+          files.push(...findModelFilesRecursive(itemPath));
+        } else if (stat.isFile() && (item.endsWith(".js") || item.endsWith(".cjs") || item.endsWith(".mjs"))) {
+          // Add model files
+          files.push(itemPath);
+        }
+      }
+
+      return files;
+    };
+
+    const modelFiles = findModelFilesRecursive(fullPath);
 
     // Try to load all model files until we find our model
-    for (const file of modelFiles) {
+    for (const filePath of modelFiles) {
       try {
-        const filePath = path.join(fullPath, file);
         require(filePath);
 
         // Check if our model is now registered (try both original and pluralized)
@@ -503,7 +547,7 @@ const resolveModel = (model) => {
         }
       } catch (fileError) {
         // Continue trying other files
-        logger.debug && logger.debug(`Failed to load model file ${file}:`, fileError);
+        logger.debug && logger.debug(`Failed to load model file ${filePath}:`, fileError);
       }
     }
   }

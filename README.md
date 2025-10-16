@@ -147,6 +147,7 @@ setMongoose(mongoose);
 ```
 
 **Why is this necessary?**
+
 - When installed as a package, this library might use a different mongoose instance
 - Models registered in one instance won't be available in another
 - By sharing the instance, all models are registered in the same place
@@ -164,8 +165,8 @@ if (result.status) {
   console.log(`Loaded ${result.data.modelsRegistered} models from ${result.data.filesLoaded} files`);
   console.log(`Total models available: ${result.data.totalModels}`);
   console.log(`Files processed: ${result.data.filesProcessed}`);
-  console.log(`Newly registered models: ${result.data.registeredModels.join(', ')}`);
-  console.log(`All available models: ${result.data.allModels.join(', ')}`);
+  console.log(`Newly registered models: ${result.data.registeredModels.join(", ")}`);
+  console.log(`All available models: ${result.data.allModels.join(", ")}`);
 } else {
   console.error("Failed to load models:", result.data);
 }
@@ -173,21 +174,43 @@ if (result.status) {
 
 The `loadModels()` function:
 
-- Scans all `.js`, `.cjs`, and `.mjs` files in your models directory
+- Scans **recursively** all `.js`, `.cjs`, and `.mjs` files in your models directory and subdirectories
+- Supports organized folder structures (e.g., `models/auth/session.js`, `models/products/category.js`)
 - Requires each file to register models with Mongoose
 - Continues loading other files even if individual files fail
 - Returns detailed statistics about the loading process including:
-  - `loadedFiles`: Array of filenames that were successfully loaded
+  - `loadedFiles`: Array of relative file paths that were successfully loaded
   - `registeredModels`: Array of model names that were newly registered
   - `allModels`: Array of all available model names in mongoose.models
 - **Recommended**: Call this during application startup to ensure all models are available for populate operations
+
+**Supported folder structure:**
+
+The `loadModels()` function supports organized model directories with subdirectories:
+
+```
+models/
+├── user.js                 # Basic user model
+├── auth/                   # Authentication related models
+│   ├── session.js
+│   └── token.js
+├── products/               # Product management models
+│   ├── product.js
+│   ├── category.js
+│   └── inventory.js
+└── orders/                 # Order processing models
+    ├── order.js
+    └── payment.js
+```
+
+All files will be discovered and loaded automatically, regardless of their depth in the directory structure.
 
 **Resolution rules:**
 
 - You can pass a Mongoose Model instance directly _or_ a string name.
 - When a string name is used, the module will:
   1. Try `mongoose.models[name]`
-  2. If not found, load ALL model files from `<MODELS_DIR>` directory (supports `.js`, `.cjs`, `.mjs`)
+  2. If not found, load ALL model files **recursively** from `<MODELS_DIR>` directory (supports `.js`, `.cjs`, `.mjs`)
   3. Check `mongoose.models[name]` after each file is loaded
 - A simple pluralization is applied if `name` does not end with `s` (e.g. `"user"` → `"users"`).
 - **Note**: Model names don't need to match filenames - the system will find models regardless of the file they're defined in.
@@ -723,5 +746,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 11_  
-_Last update: 12-10-2025_
+_Document version: 12_  
+_Last update: 16-10-2025_
