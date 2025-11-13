@@ -542,6 +542,13 @@ If you want upsertOne to return the updated/inserted document, include one of th
   The method will use `findOneAndUpdate` and return the document as a plain object.
   Otherwise, it returns the default result from `updateOne` (count).
 
+**Additional upsert options:**
+You can also pass other Mongoose/MongoDB options:
+
+- `{ options: { setDefaultsOnInsert: true }}` - Apply schema defaults when inserting new documents
+- `{ options: { runValidators: true }}` - Run schema validators on update
+- `{ options: { timestamps: false }}` - Skip automatic timestamp updates
+
 **Examples**
 
 ```js
@@ -571,7 +578,7 @@ await db.upsertOne({
   model: "inventory",
   filter: { sku: "ABC-001" },
   data: { $inc: { stock: 10 } },
-  writeArg: { options: { new: true, setDefaultsOnInsert: true } },
+  writeArg: { options: { returnDocument: true } },
 });
 ```
 

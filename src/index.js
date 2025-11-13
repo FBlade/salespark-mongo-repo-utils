@@ -60,7 +60,7 @@ const loadModels = () => {
     }
 
     // Helper function to recursively find all model files
-    const findModelFiles = (dirPath, relativePath = '') => {
+    const findModelFiles = (dirPath, relativePath = "") => {
       const files = [];
       const items = fs.readdirSync(dirPath);
 
@@ -77,7 +77,7 @@ const loadModels = () => {
           files.push({
             absolutePath: itemPath,
             relativePath: itemRelativePath,
-            filename: item
+            filename: item,
           });
         }
       }
@@ -1406,6 +1406,7 @@ const aggregate = async (modelOrObj, pipeline, cacheOpts) => {
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases)
+ * 13-11-2025: Fixed incorrect returning document
  *******************************************************/
 const updateOne = async (modelOrObj, filter, data, writeArg) => {
   try {
@@ -1446,8 +1447,17 @@ const updateOne = async (modelOrObj, filter, data, writeArg) => {
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
-    // Execute update with optional Mongoose options (e.g., session, runValidators)
-    const res = await Model.updateOne(resolvedFilter, resolvedData, options);
+    let res;
+    const _wantsDoc = wantsDoc(options);
+
+    // Update the document - return document if requested, otherwise return operation result
+    if (_wantsDoc && typeof Model.findOneAndUpdate === "function") {
+      // Update and return the document
+      res = await Model.findOneAndUpdate(resolvedFilter, resolvedData, options);
+    } else {
+      // Update without returning the document
+      res = await Model.updateOne(resolvedFilter, resolvedData, options);
+    }
 
     // Invalidate cache by exact keys and/or prefixes (if provided)
     if (invalidateKeys || invalidatePrefixes) {
@@ -1458,7 +1468,7 @@ const updateOne = async (modelOrObj, filter, data, writeArg) => {
     _recordDb(opName, start);
 
     // Return the result
-    return ok(res);
+    return ok(_wantsDoc ? res.toObject() : res);
 
     // Error handling
   } catch (err) {
@@ -1665,6 +1675,7 @@ function wantsDoc(opts) {
  * 19-08-2025: Removed fallback from options
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases) and implement option for returning the upserted document or counts
+ * 13-11-2025: Fixed incorrect returning document
  *******************************************************/
 const upsertOne = async (modelOrObj, filter, data, writeArg) => {
   try {
@@ -1697,9 +1708,10 @@ const upsertOne = async (modelOrObj, filter, data, writeArg) => {
     // Merge user-provided options with upsert:true (user options cannot disable upsert)
     const opts = { upsert: true, ...options };
     let res;
+    const _wantsDoc = wantsDoc(opts);
 
     // Upsert the document
-    if (wantsDoc(opts) && typeof Model.findOneAndUpdate === "function") {
+    if (_wantsDoc && typeof Model.findOneAndUpdate === "function") {
       // Upsert and return the document
       res = await Model.findOneAndUpdate(resolvedFilter, resolvedData, opts);
     } else {
@@ -1716,7 +1728,7 @@ const upsertOne = async (modelOrObj, filter, data, writeArg) => {
     _recordDb(opName, start);
 
     // Return the result
-    return ok(res);
+    return ok(_wantsDoc ? res.toObject() : res);
 
     // Error handling
   } catch (err) {
