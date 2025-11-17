@@ -574,19 +574,6 @@ const resolveModel = (model) => {
  * - Orders object keys alphabetically
  * - Handles Date, Set, Map, Buffer, TypedArrays, BigInt, RegExp, Error, Function, Symbol
  * - Detects cycles
- * Always returns { status, data }:
- *   - { status: true, data: <string> }
- *   - { status: false, data: <Error> }
- * @param {Any} value - The value to stringify
- * History:
- * 14-08-2025: Created
- *******************************************************/
-/*******************************************************
- * ##: Stable stringify with error handling
- * Creates deterministic JSON for cache keys
- * - Orders object keys alphabetically
- * - Handles Date, Set, Map, Buffer, TypedArrays, BigInt, RegExp, Error, Function, Symbol
- * - Detects cycles
  * - Improved: Handles custom class instances by including class name and all own properties
  * Always returns { status, data }:
  *   - { status: true, data: <string> }
@@ -935,7 +922,7 @@ const invalidateCache = (input) => {
 /*******************************************************
  * ##: Create a new document in a model
  * @param {String|Object} modelOrObj - Model name (string) or object with { model, payload, writeArg }
- * @param {Object} [payload] - Payload object (if modelOrObj is string)
+ * @param {Object} [data] - Payload object (if modelOrObj is string)
  * @param {Object} [writeArg] - Write options (e.g., session) (if modelOrObj is string)
  * History:
  * 14-08-2025: Created
@@ -944,20 +931,22 @@ const invalidateCache = (input) => {
  * 22-08-2025: Updated to flexibly accept either separate params or single object
  * 23-08-2025: Ensured created document is returned as plain object
  * 28-08-2025: remove _checkConnection (edge cases)
+ * 17-11-2025: Support 'data' param in createOne, fallback to 'payload' for compatibility.
  *******************************************************/
-const createOne = async (modelOrObj, payload, writeArg) => {
+const createOne = async (modelOrObj, data, writeArg) => {
   try {
-    let model, resolvedPayload, resolvedWriteArg;
+    let model, resolvedData, resolvedWriteArg;
 
     if (typeof modelOrObj === "object" && modelOrObj !== null) {
       // If first arg is an object, extract properties with fallback to extra args
       model = modelOrObj.model;
-      resolvedPayload = modelOrObj.payload ?? payload;
+      // Prefer 'data', fallback to 'payload' for retrocompatibility
+      resolvedData = modelOrObj.data ?? modelOrObj.payload ?? data;
       resolvedWriteArg = modelOrObj.writeArg ?? writeArg;
     } else {
-      // If first arg is string (model name), use provided payload and writeArg
+      // If first arg is string (model name), use provided data/payload and writeArg
       model = modelOrObj;
-      resolvedPayload = payload;
+      resolvedData = data; // positional argument still works as before
       resolvedWriteArg = writeArg;
     }
 
@@ -970,8 +959,8 @@ const createOne = async (modelOrObj, payload, writeArg) => {
     if (!model || typeof model !== "string") {
       return fail(new Error("Model name is required and must be a string"), "createOne/validation");
     }
-    if (!resolvedPayload || typeof resolvedPayload !== "object") {
-      return fail(new Error("Payload is required and must be an object"), "createOne/validation");
+    if (!resolvedData || typeof resolvedData !== "object") {
+      return fail(new Error("Data is required and must be an object"), "createOne/validation");
     }
 
     // Resolve the model (cached)
@@ -985,7 +974,7 @@ const createOne = async (modelOrObj, payload, writeArg) => {
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
     // Create the document
-    const doc = await Model.create(resolvedPayload, options);
+    const doc = await Model.create(resolvedData, options);
 
     // Optional cache invalidation (by key and/or prefix)
     if (invalidateKeys || invalidatePrefixes) {

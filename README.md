@@ -525,7 +525,8 @@ await db.countDocuments({ model: "orders", filter: { status: "processing" }, cac
 
 ### Write
 
-- `createOne(modelOrObj, payload?, writeArg?)`
+- `createOne(modelOrObj, data?, writeArg?)` (preferred)
+- `createOne(modelOrObj, payload?, writeArg?)` (legacy, still supported)
 - `createMany(modelOrObj, docs?, writeArg?)`
 - `updateOne(modelOrObj, filter?, data?, writeArg?)`
 - `updateMany(modelOrObj, filter?, data?, writeArg?)`
@@ -552,10 +553,13 @@ You can also pass other Mongoose/MongoDB options:
 **Examples**
 
 ```js
-// createOne (parameters)
+// createOne (parameters, preferred)
 await db.createOne("logs", { type: "signup", user: userId });
 
-// createOne (object)
+// createOne (object, preferred)
+await db.createOne({ model: "logs", data: { type: "signup", user: userId } });
+
+// createOne (object, legacy - still supported for backward compatibility)
 await db.createOne({ model: "logs", payload: { type: "signup", user: userId } });
 
 // createMany (parameters)
@@ -610,7 +614,7 @@ await db.withTransaction(
     const b = await db.updateOne({ model: "wallets", filter: { _id: toId }, data: { $inc: { balance: +100 } }, writeArg: { session } });
     if (!b.status) throw b.data;
 
-    await db.createOne({ model: "transfers", payload: { fromId, toId, amount: 100 }, writeArg: { session } });
+    await db.createOne({ model: "transfers", data: { fromId, toId, amount: 100 }, writeArg: { session } });
   },
   { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
 );
@@ -753,5 +757,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 12_  
-_Last update: 16-10-2025_
+_Document version: 13_  
+_Last update: 17-11-2025_
