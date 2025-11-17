@@ -130,21 +130,26 @@ declare module "@salespark/mongo-repo-utils" {
 
   // CRUD Operations
 
+
   /**
    * Creates a single document in the specified model
    * @param model - Model name (string)
-   * @param payload - Document data to create
+   * @param data - Document data to create (preferred)
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to created document in { status, data } format
+   * @remarks
+   * The second parameter can be 'data' (preferred) or 'payload' (legacy, still supported for backward compatibility).
    */
-  export function createOne(model: string, payload: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function createOne(model: string, data: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
 
   /**
    * Creates a single document using object-style parameters
-   * @param options - Object containing model, payload, and writeArg
+   * @param options - Object containing model, data (preferred), and writeArg
    * @returns Promise resolving to created document in { status, data } format
+   * @remarks
+   * The options object can use 'data' (preferred) or 'payload' (legacy, still supported for backward compatibility).
    */
-  export function createOne(options: { model: string; payload: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function createOne(options: { model: string; data?: object; payload?: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
 
   /**
    * Creates multiple documents in the specified model (bulk insert)
