@@ -1,6 +1,6 @@
 declare module "@salespark/mongo-repo-utils" {
   // Base response contract
-  interface ApiResponse<T = any> {
+  interface SalesParkContract<T = any> {
     status: boolean;
     data: T;
   }
@@ -10,7 +10,7 @@ declare module "@salespark/mongo-repo-utils" {
     enabled?: boolean;
     key?: string;
     ttl?: number | string;
-    cacheIf?: (res: ApiResponse) => boolean;
+    cacheIf?: (res: SalesParkContract) => boolean;
   }
 
   // Write argument interface
@@ -81,7 +81,7 @@ declare module "@salespark/mongo-repo-utils" {
    * Useful to call at application startup to ensure all models are registered
    * @returns Response with detailed information about loaded models and statistics
    */
-  export function loadModels(): ApiResponse<{
+  export function loadModels(): SalesParkContract<{
     directory: string;
     filesProcessed: number;
     filesLoaded: number;
@@ -97,28 +97,28 @@ declare module "@salespark/mongo-repo-utils" {
    * @param dir - Absolute path to the models directory
    * @returns Response indicating success or failure
    */
-  export function setModelsDir(dir: string): ApiResponse<{ message: string }>;
+  export function setModelsDir(dir: string): SalesParkContract<{ message: string }>;
 
   /**
    * Sets the mongoose instance to use (important for sharing models with host app)
    * @param mongooseInstance - The mongoose instance from the host application
    * @returns Response indicating success or failure
    */
-  export function setMongoose(mongooseInstance: any): ApiResponse<{ message: string }>;
+  export function setMongoose(mongooseInstance: any): SalesParkContract<{ message: string }>;
 
   /**
    * Configures a logger function for error reporting
    * @param logger - Function to handle errors or logger object (e.g., console)
    * @returns Response indicating success or failure
    */
-  export function setLogger(logger: ((err: any, ctx: string) => void) | any): ApiResponse<{ message: string }>;
+  export function setLogger(logger: ((err: any, ctx: string) => void) | any): SalesParkContract<{ message: string }>;
 
   /**
    * Configures a cache interface for read operations
    * @param cache - Cache object with get, put, del, and keys methods
    * @returns Response indicating success or failure
    */
-  export function setCache(cache: CacheInterface): ApiResponse<{ message: string }>;
+  export function setCache(cache: CacheInterface): SalesParkContract<{ message: string }>;
 
   /**
    * Adds a specific model file by loading it from the given file path
@@ -126,10 +126,9 @@ declare module "@salespark/mongo-repo-utils" {
    * @param filePath - Path to the model file (absolute or relative to models directory)
    * @returns Promise resolving to result indicating success or failure
    */
-  export function addModelByFile(name: string, filePath: string): Promise<ApiResponse<{ message: string }>>;
+  export function addModelByFile(name: string, filePath: string): Promise<SalesParkContract<{ message: string }>>;
 
   // CRUD Operations
-
 
   /**
    * Creates a single document in the specified model
@@ -140,16 +139,16 @@ declare module "@salespark/mongo-repo-utils" {
    * @remarks
    * The second parameter can be 'data' (preferred) or 'payload' (legacy, still supported for backward compatibility).
    */
-  export function createOne(model: string, data: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function createOne(model: string, data: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Creates a single document using object-style parameters
-   * @param options - Object containing model, data (preferred), and writeArg
+   * @param options - Object containing model, data (preferred), payload (legacy), and writeArg
    * @returns Promise resolving to created document in { status, data } format
    * @remarks
    * The options object can use 'data' (preferred) or 'payload' (legacy, still supported for backward compatibility).
    */
-  export function createOne(options: { model: string; data?: object; payload?: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function createOne(options: { model: string; data?: object; payload?: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Creates multiple documents in the specified model (bulk insert)
@@ -158,14 +157,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to array of created documents in { status, data } format
    */
-  export function createMany(model: string, docs: object | object[], writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function createMany(model: string, docs: object | object[], writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Creates multiple documents using object-style parameters
    * @param options - Object containing model, docs, and writeArg
    * @returns Promise resolving to array of created documents in { status, data } format
    */
-  export function createMany(options: { model: string; docs: object | object[]; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function createMany(options: { model: string; docs: object | object[]; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Finds a single document matching the filter criteria
@@ -184,7 +183,7 @@ declare module "@salespark/mongo-repo-utils" {
     sort?: object,
     populate?: any,
     cacheOpts?: CacheOptions
-  ): Promise<ApiResponse>;
+  ): Promise<SalesParkContract>;
 
   /**
    * Finds a single document using object-style parameters
@@ -198,7 +197,7 @@ declare module "@salespark/mongo-repo-utils" {
     sort?: object;
     populate?: any;
     cacheOpts?: CacheOptions;
-  }): Promise<ApiResponse>;
+  }): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents matching the filter criteria
@@ -217,7 +216,7 @@ declare module "@salespark/mongo-repo-utils" {
     sort?: object,
     populate?: any,
     cacheOpts?: CacheOptions
-  ): Promise<ApiResponse>;
+  ): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents using object-style parameters
@@ -231,7 +230,7 @@ declare module "@salespark/mongo-repo-utils" {
     sort?: object;
     populate?: any;
     cacheOpts?: CacheOptions;
-  }): Promise<ApiResponse>;
+  }): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents with a maximum limit (simple limiting without pagination metadata)
@@ -273,7 +272,7 @@ declare module "@salespark/mongo-repo-utils" {
     limit?: number,
     populate?: any,
     cacheOpts?: CacheOptions
-  ): Promise<ApiResponse>;
+  ): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents with limit using object-style parameters
@@ -288,7 +287,7 @@ declare module "@salespark/mongo-repo-utils" {
     limit?: number;
     populate?: any;
     cacheOpts?: CacheOptions;
-  }): Promise<ApiResponse>;
+  }): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents with pagination support and metadata
@@ -311,7 +310,7 @@ declare module "@salespark/mongo-repo-utils" {
     limit?: number,
     populate?: any,
     cacheOpts?: CacheOptions
-  ): Promise<ApiResponse>;
+  ): Promise<SalesParkContract>;
 
   /**
    * Finds multiple documents with pagination using object-style parameters
@@ -327,7 +326,7 @@ declare module "@salespark/mongo-repo-utils" {
     limit?: number;
     populate?: any;
     cacheOpts?: CacheOptions;
-  }): Promise<ApiResponse>;
+  }): Promise<SalesParkContract>;
 
   /**
    * Executes a MongoDB aggregation pipeline
@@ -336,14 +335,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param cacheOpts - Cache configuration options
    * @returns Promise resolving to aggregation results in { status, data } format
    */
-  export function aggregate(model: string, pipeline: object[], cacheOpts?: CacheOptions): Promise<ApiResponse>;
+  export function aggregate(model: string, pipeline: object[], cacheOpts?: CacheOptions): Promise<SalesParkContract>;
 
   /**
    * Executes aggregation using object-style parameters
    * @param options - Object containing model, pipeline, and cache options
    * @returns Promise resolving to aggregation results in { status, data } format
    */
-  export function aggregate(options: { model: string; pipeline: object[]; cacheOpts?: CacheOptions }): Promise<ApiResponse>;
+  export function aggregate(options: { model: string; pipeline: object[]; cacheOpts?: CacheOptions }): Promise<SalesParkContract>;
 
   /**
    * Counts documents matching the filter criteria
@@ -352,14 +351,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param cacheOpts - Cache configuration options
    * @returns Promise resolving to document count in { status, data } format
    */
-  export function countDocuments(model: string, filter?: object, cacheOpts?: CacheOptions): Promise<ApiResponse>;
+  export function countDocuments(model: string, filter?: object, cacheOpts?: CacheOptions): Promise<SalesParkContract>;
 
   /**
    * Counts documents using object-style parameters
    * @param options - Object containing model, filter, and cache options
    * @returns Promise resolving to document count in { status, data } format
    */
-  export function countDocuments(options: { model: string; filter?: object; cacheOpts?: CacheOptions }): Promise<ApiResponse>;
+  export function countDocuments(options: { model: string; filter?: object; cacheOpts?: CacheOptions }): Promise<SalesParkContract>;
 
   /**
    * Updates a single document matching the filter criteria
@@ -369,14 +368,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to update result in { status, data } format
    */
-  export function updateOne(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function updateOne(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Updates a single document using object-style parameters
    * @param options - Object containing model, filter, data, and writeArg
    * @returns Promise resolving to update result in { status, data } format
    */
-  export function updateOne(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function updateOne(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Updates multiple documents matching the filter criteria
@@ -386,14 +385,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to update result in { status, data } format
    */
-  export function updateMany(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function updateMany(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Updates multiple documents using object-style parameters
    * @param options - Object containing model, filter, data, and writeArg
    * @returns Promise resolving to update result in { status, data } format
    */
-  export function updateMany(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function updateMany(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Updates or inserts a document (upsert operation)
@@ -403,14 +402,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to upsert result in { status, data } format
    */
-  export function upsertOne(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function upsertOne(model: string, filter: object, data: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Upserts a document using object-style parameters
    * @param options - Object containing model, filter, data, and writeArg
    * @returns Promise resolving to upsert result in { status, data } format
    */
-  export function upsertOne(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function upsertOne(options: { model: string; filter: object; data: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Deletes a single document matching the filter criteria
@@ -419,14 +418,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to delete result in { status, data } format
    */
-  export function deleteOne(model: string, filter: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function deleteOne(model: string, filter: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Deletes a single document using object-style parameters
    * @param options - Object containing model, filter, and writeArg
    * @returns Promise resolving to delete result in { status, data } format
    */
-  export function deleteOne(options: { model: string; filter: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function deleteOne(options: { model: string; filter: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Deletes multiple documents matching the filter criteria
@@ -435,14 +434,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param writeArg - Optional write options, session, or cache invalidation keys
    * @returns Promise resolving to delete result in { status, data } format
    */
-  export function deleteMany(model: string, filter: object, writeArg?: string | string[] | WriteArg): Promise<ApiResponse>;
+  export function deleteMany(model: string, filter: object, writeArg?: string | string[] | WriteArg): Promise<SalesParkContract>;
 
   /**
    * Deletes multiple documents using object-style parameters
    * @param options - Object containing model, filter, and writeArg
    * @returns Promise resolving to delete result in { status, data } format
    */
-  export function deleteMany(options: { model: string; filter: object; writeArg?: string | string[] | WriteArg }): Promise<ApiResponse>;
+  export function deleteMany(options: { model: string; filter: object; writeArg?: string | string[] | WriteArg }): Promise<SalesParkContract>;
 
   /**
    * Executes work within a MongoDB transaction
@@ -450,14 +449,14 @@ declare module "@salespark/mongo-repo-utils" {
    * @param txOptions - Transaction options (readConcern, writeConcern, etc.)
    * @returns Promise resolving to transaction result in { status, data } format
    */
-  export function withTransaction(work: (session: any) => Promise<any>, txOptions?: TransactionOptions): Promise<ApiResponse>;
+  export function withTransaction(work: (session: any) => Promise<any>, txOptions?: TransactionOptions): Promise<SalesParkContract>;
 
   /**
    * Executes transaction using object-style parameters
    * @param options - Object containing work function and transaction options
    * @returns Promise resolving to transaction result in { status, data } format
    */
-  export function withTransaction(options: { work: (session: any) => Promise<any>; txOptions?: TransactionOptions }): Promise<ApiResponse>;
+  export function withTransaction(options: { work: (session: any) => Promise<any>; txOptions?: TransactionOptions }): Promise<SalesParkContract>;
 
   /**
    * Safely executes any function and ensures { status, data } response format
@@ -465,24 +464,26 @@ declare module "@salespark/mongo-repo-utils" {
    * @param args - Arguments to pass to the function
    * @returns Promise resolving to function result in { status, data } format
    */
-  export function safeQuery(fn: Function, ...args: any[]): Promise<ApiResponse>;
+  export function safeQuery(fn: Function, ...args: any[]): Promise<SalesParkContract>;
 
   /**
    * Gets current performance and cache metrics
    * @returns Metrics object containing cache and database operation statistics
    */
-  export function getMetrics(): ApiResponse<Metrics>;
+  export function getMetrics(): SalesParkContract<Metrics>;
 
   /**
    * Resets all metrics counters to zero
    * @returns Response indicating successful reset
    */
-  export function resetMetrics(): ApiResponse<{ message: string }>;
+  export function resetMetrics(): SalesParkContract<{ message: string }>;
 
   /**
    * Manually invalidates cache entries by keys and/or prefixes
    * @param input - Cache keys, prefixes, or object with keys/prefixes arrays
    * @returns Response with number of invalidated entries
    */
-  export function invalidateCache(input: string | string[] | { keys?: string | string[]; prefixes?: string | string[] }): ApiResponse<{ invalidated: number }>;
+  export function invalidateCache(
+    input: string | string[] | { keys?: string | string[]; prefixes?: string | string[] }
+  ): SalesParkContract<{ invalidated: number }>;
 }

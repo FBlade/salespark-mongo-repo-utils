@@ -344,6 +344,7 @@ const hash = (str) => {
  * @param {Any} arg - The write argument
  * History:
  * 15-08-2025: Created
+ * 06-12-2025: Added support for returnDocument shorthand (true -> "after")
  *******************************************************/
 const _parseWriteArg = (arg) => {
   // Initialize local variables for possible outputs
@@ -370,6 +371,11 @@ const _parseWriteArg = (arg) => {
     if ("options" in arg && typeof arg.options === "object") options = arg.options;
     // Or allow passing the options object directly (without nesting under "options")
     else if ("session" in arg || "upsert" in arg || "writeConcern" in arg || "runValidators" in arg) options = arg;
+  }
+
+  // Handle returnDocument shorthand: true -> "after"
+  if (options && options.returnDocument === true) {
+    options.returnDocument = "after";
   }
 
   // Return the parsed structure { options, invalidateKeys, invalidatePrefixes }
@@ -932,6 +938,7 @@ const invalidateCache = (input) => {
  * 23-08-2025: Ensured created document is returned as plain object
  * 28-08-2025: remove _checkConnection (edge cases)
  * 17-11-2025: Support 'data' param in createOne, fallback to 'payload' for compatibility.
+ * 06-12-2025: Added conditional array handling for session support in createOne
  *******************************************************/
 const createOne = async (modelOrObj, data, writeArg) => {
   try {
@@ -973,8 +980,14 @@ const createOne = async (modelOrObj, data, writeArg) => {
     // Parse flexible writeArg into { options, invalidateKeys, invalidatePrefixes }
     const { options, invalidateKeys, invalidatePrefixes } = _parseWriteArg(resolvedWriteArg);
 
+    let payload = resolvedData;
+    // Check if options has session (for transaction support)
+    if (options && options.session) {
+      payload = [resolvedData];
+    }
+
     // Create the document
-    const doc = await Model.create(resolvedData, options);
+    const doc = await Model.create(payload, options);
 
     // Optional cache invalidation (by key and/or prefix)
     if (invalidateKeys || invalidatePrefixes) {
@@ -983,6 +996,11 @@ const createOne = async (modelOrObj, data, writeArg) => {
 
     // Record database operation metrics
     _recordDb(opName, start);
+
+    // Return the created first document if doc was an array
+    if (Array.isArray(doc)) {
+      return ok(doc[0].toObject());
+    }
 
     // Return the created document
     return ok(doc.toObject());
