@@ -570,7 +570,7 @@ const resolveModel = (model) => {
   const availableModels = Object.keys(mongoose.models);
   throw new Error(
     `Mongoose model "${model}" (or "${name}") not found after loading all model files from ${fullPath}. ` +
-      `Available models (${availableModels.length}): ${availableModels.join(", ")}`
+      `Available models (${availableModels.length}): ${availableModels.join(", ")}`,
   );
 };
 
@@ -1317,7 +1317,7 @@ const getManyWithLimit = async (modelOrObj, filter, select = [], sort = {}, limi
         "getManyWithLimit",
         [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedLimit, resolvedPopulate],
         resolvedCacheOpts,
-        runQuery
+        runQuery,
       );
     }
 
@@ -1414,6 +1414,7 @@ const aggregate = async (modelOrObj, pipeline, cacheOpts) => {
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases)
  * 13-11-2025: Fixed incorrect returning document
+ * 19-01-2026: Fix wantsDoc res.toObject() when res is null
  *******************************************************/
 const updateOne = async (modelOrObj, filter, data, writeArg) => {
   try {
@@ -1474,8 +1475,8 @@ const updateOne = async (modelOrObj, filter, data, writeArg) => {
     // Record database operation metrics
     _recordDb(opName, start);
 
-    // Return the result
-    return ok(_wantsDoc ? res.toObject() : res);
+    // Return the result (guard null when findOneAndUpdate matches nothing)
+    return ok(_wantsDoc ? (res ? res.toObject() : null) : res);
 
     // Error handling
   } catch (err) {
@@ -1683,6 +1684,7 @@ function wantsDoc(opts) {
  * 22-08-2025: Updated to flexibly accept either separate params or single object, with fallback for missing props
  * 28-08-2025: remove _checkConnection (edge cases) and implement option for returning the upserted document or counts
  * 13-11-2025: Fixed incorrect returning document
+ * 19-01-2026: Fix wantsDoc res.toObject() when res is null
  *******************************************************/
 const upsertOne = async (modelOrObj, filter, data, writeArg) => {
   try {
@@ -1734,8 +1736,8 @@ const upsertOne = async (modelOrObj, filter, data, writeArg) => {
     // Record database operation metrics
     _recordDb(opName, start);
 
-    // Return the result
-    return ok(_wantsDoc ? res.toObject() : res);
+    // Return the result (guard null when findOneAndUpdate matches nothing)
+    return ok(_wantsDoc ? (res ? res.toObject() : null) : res);
 
     // Error handling
   } catch (err) {
@@ -1822,7 +1824,7 @@ const getManyWithPagination = async (modelOrObj, filter, select = [], sort = {},
         "getManyWithPagination",
         [model, resolvedFilter, resolvedSelect, resolvedSort, resolvedPage, resolvedLimit, resolvedPopulate],
         resolvedCacheOpts,
-        runQuery
+        runQuery,
       );
     }
 
