@@ -298,7 +298,7 @@ await db.updateMany(
 );
 ```
 
-> Note: manual `invalidateCache()` is internal; writes can trigger invalidation if you pass keys/prefixes as above.
+> Note: you can also call `invalidateCache()` manually; writes can trigger invalidation if you pass keys/prefixes as above.
 
 ---
 

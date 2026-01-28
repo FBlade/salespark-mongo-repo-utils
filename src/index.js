@@ -1945,6 +1945,7 @@ module.exports = {
   // utils
   safeQuery,
   withTransaction,
+  invalidateCache,
 
   // metrics
   getMetrics,
