@@ -1,6 +1,7 @@
 const path = require("path");
 let mongoose = require("mongoose"); // Default mongoose instance
 const fs = require("fs"); //required for fs.promises
+const memCache = require("./memory-cache");
 
 // Define default time-to-live for cache in milliseconds
 const DEFAULT_TTL = 60_000;
@@ -194,12 +195,13 @@ const setLogger = (_logger) => {
 };
 /*******************************************************
  * ##: Cache injection
- * Default: disabled. Users can inject any cache interface
+ * Default: memory-cache.js instance. Users can inject any cache interface
  * with { get(key), put(key, val, ttlMs), del(key), keys() }.
  * e.g., setCache(memCacheInstance)
  * History:
  * 16-08-2025: Created
  * 22-08-2025: Updated (Add validation)
+ * 
  *******************************************************/
 const noopCache = {
   get: () => undefined,
@@ -207,7 +209,8 @@ const noopCache = {
   del: () => false, // Return false to indicate no deletion occurred
   keys: () => [],
 };
-let cache = noopCache;
+const defaultCache = memCache || noopCache;
+let cache = defaultCache;
 
 /*******************************************************
  * ##: Set Cache
@@ -223,7 +226,7 @@ const setCache = (_cache) => {
     cache = _cache;
     return ok({ message: "Cache interface set successfully" }); // Follow contract with success return
   } else {
-    cache = noopCache;
+    cache = defaultCache;
     return fail(new Error("Invalid cache interface: must have get, put, del, and keys methods"), "setCache");
   }
 };
@@ -684,42 +687,37 @@ const buildCacheKey = (fnName, args) => {
  *  - negative numbers -> 0
  * History:
  * 18-08-2025: Created
+ * 29-01-2026: Refactored to use object map instead of switch statement for unit multipliers
  *******************************************************/
 const normalizeTTL = (ttl) => {
   try {
-    // Number input → treat as milliseconds
     if (typeof ttl === "number" && Number.isFinite(ttl)) {
-      return ttl < 0 ? 0 : ttl; // negative -> 0 (effectively no-cache for most stores)
+      return ttl < 0 ? 0 : ttl;
     }
 
-    // String input → parse "<int>[unit]"
     if (typeof ttl === "string") {
       const s = ttl.trim().toLowerCase();
-      const m = s.match(/^(\d+)(ms|s|m|h|d)?$/);
+      const m = s.match(/^(\d+)(ms|s|sec|secs|m|min|mins|h|hr|hrs|d|day|days)?$/);
       if (m) {
         const value = parseInt(m[1], 10);
-        const unit = m[2] || "ms"; // default to milliseconds when unit is omitted
-        switch (unit) {
-          case "ms":
-            return value;
-          case "s":
-            return value * 1_000;
-          case "m":
-            return value * 60_000;
-          case "h":
-            return value * 3_600_000;
-          case "d":
-            return value * 86_400_000;
-          default:
-            // Shouldn't reach here due to regex, but keep safe:
-            return DEFAULT_TTL;
-        }
+        const unit = m[2] || "ms";
+
+        // Extract key: "ms" stays as is, others use first char
+        const key = unit === "ms" ? "ms" : unit[0];
+
+        const multipliers = {
+          ms: 1,
+          s: 1_000,
+          m: 60_000,
+          h: 3_600_000,
+          d: 86_400_000,
+        };
+
+        return value * (multipliers[key] ?? 1);
       }
-      // Unparseable string -> default
       return DEFAULT_TTL;
     }
 
-    // Fallback for other types/null/undefined
     return DEFAULT_TTL;
   } catch (_) {
     return DEFAULT_TTL;
@@ -736,6 +734,7 @@ const normalizeTTL = (ttl) => {
  * History:
  * 14-08-2025: Created
  * 18-08-2025: Added support for cache TTL normalization
+ * 29-01-2026: Fix undefined cache key
  *******************************************************/
 const withCache = async (fnName, args, cacheOpts, runFn) => {
   const { enabled = true, key, ttl = DEFAULT_TTL, cacheIf = (r) => r?.status === true } = cacheOpts || {};
@@ -747,7 +746,7 @@ const withCache = async (fnName, args, cacheOpts, runFn) => {
     return res && typeof res.status === "boolean" ? res : ok(res);
   }
 
-  const k = key ?? buildCacheKey(fnName, args);
+  const k = typeof key === "string" ? { status: true, data: key } : (key ?? buildCacheKey(fnName, args));
   if (k.status === false) {
     // If failed to build cache key, run the function without caching
     const res = await runFn();
