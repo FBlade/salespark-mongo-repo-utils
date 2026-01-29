@@ -74,7 +74,7 @@ db.setLogger((err, ctx) => {
 // Alternative: an object, e.g. console
 db.setLogger(console);
 
-// 3) (Optional) Inject a cache with { get, put, del, keys }
+// 3) (Optional) Override cache (default is built-in MemoryCache)
 const simpleCache = new Map();
 db.setCache({
   get: (k) => simpleCache.get(k),
@@ -231,8 +231,8 @@ db.setLogger(console.error);
 ### Cache injection (optional)
 
 Provide an object with the interface `{ get(key), put(key, value, ttlMs), del(key), keys() }`.  
-If the provided cache doesn't have the required `get` function, it falls back to a no-op cache.
-If no cache is provided, reads run uncached and writes still work (they will try to invalidate only if a cache exists).
+If the provided cache doesn't have the required functions, it falls back to the built-in MemoryCache.
+If you want to disable caching entirely, inject a no-op cache (example below).
 
 ```js
 db.setCache({
@@ -250,8 +250,25 @@ db.setCache({
   },
 });
 
-// Invalid cache will fallback to no-op
-db.setCache({}); // Falls back to no-op cache
+// Invalid cache will fallback to built-in MemoryCache
+db.setCache({});
+
+// Explicit no-op cache (disables caching)
+db.setCache({
+  get: () => undefined,
+  put: () => false,
+  del: () => false,
+  keys: () => [],
+});
+
+#### Built-in MemoryCache (default)
+
+If you do not call `setCache()`, a built-in in-memory cache is used automatically. Behavior matches the `internal memory cache` implementation:
+
+- Default limits: `maxEntries = 5000`, `defaultTTL = 60_000` ms.
+- TTL per entry; pass `ttl = -1` to store without expiry.
+- LRU-style behavior: on `get`, the entry is moved to the most-recent position.
+- On insert, the oldest entry is evicted when `maxEntries` is reached.
 ```
 
 ---
@@ -294,7 +311,7 @@ await db.updateMany(
   "orders",
   { status: "processing" },
   { $set: { status: "paid" } },
-  { options: { runValidators: true }, invalidatePrefixes: ["orders:list:", "getMany:orders:"] }
+  { options: { runValidators: true }, invalidatePrefixes: ["orders:list:", "getMany:orders:"] },
 );
 ```
 
@@ -329,7 +346,7 @@ await db.getOne(
   null, // projection
   null, // sort
   { path: "customer", select: "name email" }, // populate
-  { enabled: true, ttl: "1h" } // cache
+  { enabled: true, ttl: "1h" }, // cache
 );
 
 // getOne with sort (parameters) - get most recent order
@@ -339,7 +356,7 @@ await db.getOne(
   null, // projection
   { createdAt: -1 }, // sort (most recent first)
   null, // populate
-  { enabled: true, ttl: "5m" } // cache
+  { enabled: true, ttl: "5m" }, // cache
 );
 
 // getOne with populate (object)
@@ -360,7 +377,7 @@ await db.getMany(
   ["_id", "total"], // projection
   { createdAt: -1 }, // sort
   { path: "customer", select: "name email" }, // populate
-  { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 } // cache
+  { enabled: true, key: "orders:paid:list:v1", ttl: 30_000 }, // cache
 );
 
 // getMany with single populate (object)
@@ -384,7 +401,7 @@ await db.getMany(
     { path: "products", select: ["field1", "field2"] },
     { path: "customer", select: "name email" },
   ],
-  { enabled: true } // cache
+  { enabled: true }, // cache
 );
 
 // getMany with multiple populates (object)
@@ -408,7 +425,7 @@ await db.getManyWithLimit(
   { createdAt: -1 }, // sort
   50, // limit
   { path: "category", select: "name" }, // populate
-  { enabled: true, ttl: "10m" } // cache
+  { enabled: true, ttl: "10m" }, // cache
 );
 
 // getManyWithLimit with single populate (object)
@@ -434,7 +451,7 @@ await db.getManyWithLimit(
     { path: "products", select: ["name", "price"] },
     { path: "customer", select: "name email" },
   ],
-  { enabled: true } // cache
+  { enabled: true }, // cache
 );
 
 // getManyWithLimit with multiple populates (object)
@@ -470,7 +487,7 @@ const paged = await db.getManyWithPagination(
   2, // page
   20, // limit
   { path: "category", select: "name" }, // populate
-  { enabled: true, key: "products:active:p2:l20" } // cache
+  { enabled: true, key: "products:active:p2:l20" }, // cache
 );
 
 // getManyWithPagination with populate (object)
@@ -498,7 +515,7 @@ const pagedMulti = await db.getManyWithPagination(
     { path: "products", select: ["field1", "field2"] },
     { path: "customer", select: "name email" },
   ],
-  { enabled: true } // cache
+  { enabled: true }, // cache
 );
 
 // getManyWithPagination with multiple populates (object)
@@ -602,7 +619,7 @@ await db.withTransaction(
 
     await db.createOne("transfers", { fromId, toId, amount: 100 }, { session });
   },
-  { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
+  { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 },
 );
 
 // withTransaction (object)
@@ -616,7 +633,7 @@ await db.withTransaction(
 
     await db.createOne({ model: "transfers", data: { fromId, toId, amount: 100 }, writeArg: { session } });
   },
-  { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 }
+  { readConcern: "snapshot", writeConcern: { w: "majority" }, maxCommitRetries: 2 },
 );
 ```
 
