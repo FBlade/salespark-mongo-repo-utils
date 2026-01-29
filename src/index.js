@@ -755,11 +755,18 @@ const withCache = async (fnName, args, cacheOpts, runFn) => {
   const cacheKey = k.data;
 
   const hit = cache.get(cacheKey);
-  if (hit !== undefined && hit !== null) return hit; // Is already {status,data}
+  if (hit !== undefined && hit !== null) {
+    METRICS.cache.hits += 1;
+    return hit; // Is already {status,data}
+  }
+  METRICS.cache.misses += 1;
 
   const res = await runFn();
   const normalized = res && typeof res.status === "boolean" ? res : ok(res);
-  if (cacheIf(normalized)) cache.put(cacheKey, normalized, normalizedTTL);
+  if (cacheIf(normalized)) {
+    cache.put(cacheKey, normalized, normalizedTTL);
+    METRICS.cache.puts += 1;
+  }
   return normalized;
 };
 
