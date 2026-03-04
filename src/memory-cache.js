@@ -36,7 +36,7 @@ class MemoryCache {
     const debugMemoryUsage = () => {
       setInterval(() => {
         // Print cache size and size in bytes
-        console.log(`🔴🔴🔴 [MEMORY DEBUG - MemoryCacheV2] : ${this.cache.size}, (${humanFileSize(this.sizebytes())})`);
+        console.log(`🔴🔴🔴 [MemoryCacheV2 Mongo-Repo-Utils] : ${this.cache.size}, (${humanFileSize(this.sizebytes())})`);
       }, 15000); //  every 15 seconds
     };
 
