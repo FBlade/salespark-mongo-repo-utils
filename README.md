@@ -331,6 +331,7 @@ await db.updateMany(
 - `aggregate(modelOrObj, pipeline?, cacheOpts?)` — Executes a MongoDB aggregation pipeline.
 - `getManyWithPagination(modelOrObj, filter?, select?, sort?, page?, limit?, populate?, cacheOpts?)`
 - `countDocuments(modelOrObj, filter?, cacheOpts?)`
+- `distinct(modelOrObj, field, filter?, cacheOpts?)`
 
 > **Note:** `getManyWithLimit` vs `getManyWithPagination`: Use `getManyWithLimit` when you need simple result limiting without pagination metadata. Use `getManyWithPagination` when you need full pagination with page info, total counts, and navigation metadata.
 
@@ -476,6 +477,17 @@ await db.aggregate({
   model: "orders",
   pipeline: [{ $match: { status: "paid" } }, { $group: { _id: "$userId", total: { $sum: "$amount" } } }],
   cacheOpts: { enabled: true, ttl: "5m" },
+});
+
+// distinct (parameters)
+await db.distinct("orders", "status", { createdAt: { $gte: new Date("2024-01-01") } }, { enabled: true, ttl: "10m" });
+
+// distinct (object)
+await db.distinct({
+  model: "orders",
+  field: "status",
+  filter: { createdAt: { $gte: new Date("2024-01-01") } },
+  cacheOpts: { enabled: true, ttl: "10m" },
 });
 
 // getManyWithPagination with populate (parameters)
@@ -774,5 +786,5 @@ MIT © [SalesPark](https://salespark.io)
 
 ---
 
-_Document version: 13_  
-_Last update: 17-11-2025_
+_Document version: 14_  
+_Last update: 13-03-2026_

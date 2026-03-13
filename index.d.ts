@@ -361,6 +361,23 @@ declare module "@salespark/mongo-repo-utils" {
   export function countDocuments(options: { model: string; filter?: object; cacheOpts?: CacheOptions }): Promise<SalesParkContract>;
 
   /**
+   * Gets distinct values for a field in a model
+   * @param model - Model name (string)
+   * @param field - Field name to distinct on
+   * @param filter - MongoDB filter object (optional, defaults to {})
+   * @param cacheOpts - Cache configuration options
+   * @returns Promise resolving to array of distinct values in { status, data } format
+   */
+  export function distinct(model: string, field: string, filter?: object, cacheOpts?: CacheOptions): Promise<SalesParkContract>;
+
+  /**
+   * Gets distinct values using object-style parameters
+   * @param options - Object containing model, field, filter, and cache options
+   * @returns Promise resolving to array of distinct values in { status, data } format
+   */
+  export function distinct(options: { model: string; field: string; filter?: object; cacheOpts?: CacheOptions }): Promise<SalesParkContract>;
+
+  /**
    * Updates a single document matching the filter criteria
    * @param model - Model name (string)
    * @param filter - MongoDB filter object to find document to update

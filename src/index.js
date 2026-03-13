@@ -1908,6 +1908,79 @@ const countDocuments = async (modelOrObj, filter, cacheOpts) => {
   }
 };
 
+/*******************************************************
+ * ##: Get distinct values in a model
+ * @param {String|Object} modelOrObj - Model name (string) or object with { model, field, filter, cacheOpts }
+ * @param {String} [field] - Field name to distinct on (if modelOrObj is string or missing in object)
+ * @param {Object} [filter] - Filter object (if modelOrObj is string or missing in object)
+ * @param {Object} [cacheOpts] - Cache options (if modelOrObj is string or missing in object)
+ * History:
+ * 13-03-2026: Created
+ *******************************************************/
+const distinct = async (modelOrObj, field, filter, cacheOpts) => {
+  try {
+    let model, resolvedField, resolvedFilter, resolvedCacheOpts;
+
+    if (typeof modelOrObj === "object" && modelOrObj !== null) {
+      // If first arg is an object, extract properties with fallback to extra args
+      model = modelOrObj.model;
+      resolvedField = modelOrObj.field ?? field;
+      resolvedFilter = modelOrObj.filter ?? filter;
+      resolvedCacheOpts = modelOrObj.cacheOpts ?? cacheOpts;
+    } else {
+      // If first arg is string (model name), use provided subsequent args
+      model = modelOrObj;
+      resolvedField = field;
+      resolvedFilter = filter;
+      resolvedCacheOpts = cacheOpts;
+    }
+
+    // Validate required parameters (return fail on invalid input to follow contract)
+    if (!model || typeof model !== "string") {
+      return fail(new Error("Model name is required and must be a string"), "distinct/validation");
+    }
+    if (!resolvedField || typeof resolvedField !== "string") {
+      return fail(new Error("Field is required and must be a string"), "distinct/validation");
+    }
+
+    // Apply default for filter if undefined (empty filter distincts across all documents)
+    resolvedFilter = resolvedFilter ?? {};
+
+    // Resolve the model (cached)
+    const Model = await resolveModel(model);
+
+    // Build operation name and start time
+    const opName = `distinct:${model}`;
+    const start = _nowNs();
+
+    // Use cache only if cacheOpts is defined/active
+    if (resolvedCacheOpts?.enabled) {
+      return await withCache("distinct", [model, resolvedField, resolvedFilter], resolvedCacheOpts, async () => {
+        const values = await Model.distinct(resolvedField, resolvedFilter);
+
+        // Record database operation metrics
+        _recordDb(opName, start);
+
+        // Return the result
+        return ok(values);
+      });
+    }
+
+    // Execute without cache
+    const values = await Model.distinct(resolvedField, resolvedFilter);
+
+    // Record database operation metrics
+    _recordDb(opName, start);
+
+    // Return the result
+    return ok(values);
+
+    // Error handling
+  } catch (err) {
+    return fail(err, "distinct");
+  }
+};
+
 /****************************************************
  * ##: Safe Query Execution
  * Keeps your return contract: always { status, data }.
@@ -1948,6 +2021,7 @@ module.exports = {
   deleteMany,
   upsertOne,
   countDocuments,
+  distinct,
   // utils
   safeQuery,
   withTransaction,
