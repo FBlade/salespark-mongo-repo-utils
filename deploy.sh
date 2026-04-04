@@ -50,6 +50,20 @@ fi
 npm publish --access public
 
 echo " "
+echo "${yel}"
+echo "--------------------------------------------------"
+echo "internal-docs — atualizar SALESPARK_MODULES.md"
+echo "--------------------------------------------------${reset}"
+_deploy_dir="$(cd "$(dirname "$0")" && pwd)"
+_monorepo_root="$(cd "$_deploy_dir/.." && pwd)"
+_internal_docs="$_monorepo_root/internal-docs"
+if [ -f "$_internal_docs/build-salespark-modules-doc.mjs" ]; then
+  (cd "$_internal_docs" && npm run build) || echo "${red}internal-docs: npm run build falhou.${end}"
+else
+  echo "${yel}internal-docs não encontrado em $_internal_docs — a saltar.${end}"
+fi
+
+echo " "
 start https://www.npmjs.com/package/@salespark/mongo-repo-utils
 echo " "
 
