@@ -33,3 +33,6 @@ config.ts
 
 # Others
 build-tgz.sh
+
+# Local-only npm notes (not for the remote repo)
+NPM_TRANSITION.md
