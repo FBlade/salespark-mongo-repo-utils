@@ -1,6 +1,6 @@
 {
   "name": "@salespark/mongo-repo-utils",
-  "version": "1.0.46",
+  "version": "1.0.47",
   "description": "Utility helpers for MongoDB repositories with caching, metrics, and flexible model resolution.",
   "main": "src/index.js",
   "types": "index.d.ts",
@@ -30,6 +30,10 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "devDependencies": {
+    "grunt": "1.6.1",
+    "grunt-bump": "0.8.0"
   },
   "peerDependencies": {
     "mongoose": ">=7"
